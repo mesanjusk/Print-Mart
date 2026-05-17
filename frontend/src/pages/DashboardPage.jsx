@@ -1,0 +1,61 @@
+import { Routes, Route, Link, NavLink, useNavigate } from 'react-router-dom';
+import { FiGrid, FiPackage, FiMessageSquare, FiHeart, FiUser, FiPlus } from 'react-icons/fi';
+import { useAuth } from '../context/AuthContext';
+import DashboardHome from '../components/dashboard/DashboardHome';
+import ManageProducts from '../components/dashboard/ManageProducts';
+import Inquiries from '../components/dashboard/Inquiries';
+import SavedProducts from '../components/dashboard/SavedProducts';
+import ProfileSettings from '../components/dashboard/ProfileSettings';
+
+const navItems = [
+  { to: '/dashboard', icon: <FiGrid />, label: 'Overview', exact: true },
+  { to: '/dashboard/inquiries', icon: <FiMessageSquare />, label: 'Inquiries' },
+  { to: '/dashboard/saved', icon: <FiHeart />, label: 'Saved' },
+  { to: '/dashboard/profile', icon: <FiUser />, label: 'Profile' },
+];
+
+export default function DashboardPage() {
+  const { user } = useAuth();
+
+  return (
+    <div className="max-w-7xl mx-auto px-4 py-6">
+      <div className="flex gap-6">
+        <aside className="w-56 flex-shrink-0 hidden md:block">
+          <div className="card p-4 sticky top-20">
+            <div className="text-center pb-4 border-b mb-4">
+              <div className="w-14 h-14 bg-orange-100 rounded-full flex items-center justify-center text-orange-600 font-bold text-2xl mx-auto mb-2">
+                {user?.name?.[0]?.toUpperCase()}
+              </div>
+              <p className="font-semibold text-gray-800 text-sm">{user?.name}</p>
+              <span className="badge bg-orange-100 text-orange-700 capitalize">{user?.role}</span>
+            </div>
+            <nav className="space-y-1">
+              {user?.role === 'seller' && (
+                <NavLink to="/dashboard/products"
+                  className={({ isActive }) => `flex items-center gap-2 px-3 py-2 rounded text-sm font-medium transition-colors ${isActive ? 'bg-orange-500 text-white' : 'text-gray-600 hover:bg-orange-50 hover:text-orange-600'}`}>
+                  <FiPackage /> My Products
+                </NavLink>
+              )}
+              {navItems.map((item) => (
+                <NavLink key={item.to} to={item.to} end={item.exact}
+                  className={({ isActive }) => `flex items-center gap-2 px-3 py-2 rounded text-sm font-medium transition-colors ${isActive ? 'bg-orange-500 text-white' : 'text-gray-600 hover:bg-orange-50 hover:text-orange-600'}`}>
+                  {item.icon} {item.label}
+                </NavLink>
+              ))}
+            </nav>
+          </div>
+        </aside>
+
+        <div className="flex-grow min-w-0">
+          <Routes>
+            <Route index element={<DashboardHome />} />
+            {user?.role === 'seller' && <Route path="products/*" element={<ManageProducts />} />}
+            <Route path="inquiries" element={<Inquiries />} />
+            <Route path="saved" element={<SavedProducts />} />
+            <Route path="profile" element={<ProfileSettings />} />
+          </Routes>
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -1,5 +1,5 @@
 import { Routes, Route, Link, NavLink, useNavigate } from 'react-router-dom';
-import { FiGrid, FiPackage, FiMessageSquare, FiHeart, FiUser, FiFileText, FiImage } from 'react-icons/fi';
+import { FiGrid, FiPackage, FiMessageSquare, FiHeart, FiUser, FiFileText, FiImage, FiUsers } from 'react-icons/fi';
 import { useAuth } from '../context/AuthContext';
 import DashboardHome from '../components/dashboard/DashboardHome';
 import ManageProducts from '../components/dashboard/ManageProducts';
@@ -8,6 +8,7 @@ import SavedProducts from '../components/dashboard/SavedProducts';
 import ProfileSettings from '../components/dashboard/ProfileSettings';
 import Quotations from '../components/dashboard/Quotations';
 import DesignLibrary from '../components/dashboard/DesignLibrary';
+import AdminUsers from '../components/dashboard/AdminUsers';
 
 const navItems = [
   { to: '/dashboard', icon: <FiGrid />, label: 'Overview', exact: true },
@@ -40,6 +41,12 @@ export default function DashboardPage() {
                   <FiPackage /> My Products
                 </NavLink>
               )}
+              {user?.role === 'admin' && (
+                <NavLink to="/dashboard/admin/users"
+                  className={({ isActive }) => `flex items-center gap-2 px-3 py-2 rounded text-sm font-medium transition-colors ${isActive ? 'bg-green-600 text-white' : 'text-gray-600 hover:bg-green-50 hover:text-green-700'}`}>
+                  <FiUsers /> Manage Users
+                </NavLink>
+              )}
               {navItems.map((item) => (
                 <NavLink key={item.to} to={item.to} end={item.exact}
                   className={({ isActive }) => `flex items-center gap-2 px-3 py-2 rounded text-sm font-medium transition-colors ${isActive ? 'bg-green-600 text-white' : 'text-gray-600 hover:bg-green-50 hover:text-green-700'}`}>
@@ -54,6 +61,7 @@ export default function DashboardPage() {
           <Routes>
             <Route index element={<DashboardHome />} />
             {user?.role === 'seller' && <Route path="products/*" element={<ManageProducts />} />}
+            {user?.role === 'admin' && <Route path="admin/users" element={<AdminUsers />} />}
             <Route path="inquiries" element={<Inquiries />} />
             <Route path="quotations" element={<Quotations />} />
             <Route path="designs" element={<DesignLibrary />} />

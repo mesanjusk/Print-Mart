@@ -20,6 +20,9 @@ const userSchema = new mongoose.Schema({
   businessName: { type: String },
   gstin: { type: String },
   savedProducts: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Product' }],
+  // Seller plan: only 'premium' sellers receive WhatsApp lead broadcasts
+  plan: { type: String, enum: ['free', 'premium'], default: 'free' },
+  planActivatedAt: { type: Date },
 }, { timestamps: true });
 
 userSchema.pre('save', async function (next) {

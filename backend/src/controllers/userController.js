@@ -17,4 +17,25 @@ const toggleUserStatus = asyncHandler(async (req, res) => {
   res.json({ message: `User ${user.isActive ? 'activated' : 'deactivated'}` });
 });
 
-module.exports = { getAllUsers, toggleUserStatus };
+const togglePremium = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.params.id);
+  if (!user) {
+    res.status(404);
+    throw new Error('User not found');
+  }
+  if (user.role !== 'seller') {
+    res.status(400);
+    throw new Error('Premium plan is only for sellers');
+  }
+  user.plan = user.plan === 'premium' ? 'free' : 'premium';
+  if (user.plan === 'premium') user.planActivatedAt = new Date();
+  await user.save();
+  res.json({ message: `Seller plan set to ${user.plan}`, plan: user.plan });
+});
+
+const getSellerPlanInfo = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.user._id).select('plan planActivatedAt role');
+  res.json({ plan: user.plan, planActivatedAt: user.planActivatedAt, role: user.role });
+});
+
+module.exports = { getAllUsers, toggleUserStatus, togglePremium, getSellerPlanInfo };

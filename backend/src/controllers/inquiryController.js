@@ -63,8 +63,10 @@ const createInquiry = asyncHandler(async (req, res) => {
     console.error('[WhatsApp] Buyer confirmation failed:', err.message);
   }
 
-  // Broadcast to other sellers who offer a similar product (same category + matching printSpecs)
+  // Broadcast to other sellers who offer a similar product.
+  // COST CONTROL: only premium-plan sellers are included, capped at MAX_BROADCAST.
   try {
+    const MAX_BROADCAST = 5;
     const ps = product.printSpecs || {};
     const similarQuery = {
       _id: { $ne: product._id },
@@ -75,21 +77,32 @@ const createInquiry = asyncHandler(async (req, res) => {
     if (ps.quantity) similarQuery['printSpecs.quantity'] = ps.quantity;
     if (ps.finish) similarQuery['printSpecs.finish'] = ps.finish;
 
+    // Fetch more candidates than we need so we can filter + rank
     const similarProducts = await Product.find(similarQuery)
-      .populate('seller', 'name phone')
-      .select('seller printSpecs name')
-      .limit(10)
+      .populate('seller', 'name phone plan rating')
+      .select('seller printSpecs name rating')
+      .limit(50)
       .lean();
 
-    const sellersToNotify = [];
+    // De-duplicate sellers, keep premium-only, rank by rating then inquiry count
     const seenSellers = new Set([product.seller.toString()]);
+    const candidates = [];
     for (const sp of similarProducts) {
       const sid = sp.seller?._id?.toString();
-      if (sid && !seenSellers.has(sid) && sp.seller.phone) {
-        seenSellers.add(sid);
-        sellersToNotify.push(sp.seller);
-      }
+      if (!sid || seenSellers.has(sid) || !sp.seller.phone) continue;
+      if (sp.seller.plan !== 'premium') continue; // free-tier sellers skip WhatsApp broadcast
+      seenSellers.add(sid);
+      candidates.push({
+        seller: sp.seller,
+        score: (sp.rating?.average || 0) * 10 + (sp.rating?.count || 0),
+      });
     }
+
+    // Sort by score desc, take top MAX_BROADCAST
+    candidates.sort((a, b) => b.score - a.score);
+    const sellersToNotify = candidates.slice(0, MAX_BROADCAST).map((c) => c.seller);
+
+    console.log(`[WhatsApp] Broadcast: ${candidates.length} premium sellers matched, notifying top ${sellersToNotify.length}`);
 
     if (sellersToNotify.length > 0) {
       inquiry.broadcastedSellers = sellersToNotify.map((s) => s._id);

@@ -74,6 +74,13 @@ export const compareAPI = {
   updatePrintSpecs: (id, specs) => api.put(`/products/${id}/print-specs`, specs),
 };
 
+export const userAPI = {
+  getAll: () => api.get('/users'),
+  toggleStatus: (id) => api.put(`/users/${id}/status`),
+  togglePremium: (id) => api.put(`/users/${id}/premium`),
+  getMyPlan: () => api.get('/users/me/plan'),
+};
+
 export const designAPI = {
   upload: (formData) => api.post('/designs', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
   getAll: () => api.get('/designs'),

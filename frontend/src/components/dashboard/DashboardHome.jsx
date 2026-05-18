@@ -4,6 +4,7 @@ import { FiPackage, FiMessageSquare, FiHeart, FiArrowRight } from 'react-icons/f
 import { productAPI, inquiryAPI, supplierAPI } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import Spinner from '../common/Spinner';
+import PremiumBanner from './PremiumBanner';
 
 export default function DashboardHome() {
   const { user } = useAuth();
@@ -37,7 +38,8 @@ export default function DashboardHome() {
 
   return (
     <div>
-      <h1 className="text-xl font-bold text-gray-800 mb-6">Dashboard</h1>
+      <h1 className="text-xl font-bold text-gray-800 mb-4">Dashboard</h1>
+      <PremiumBanner />
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
         {cards.map((card) => (

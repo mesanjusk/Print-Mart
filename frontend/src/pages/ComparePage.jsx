@@ -153,7 +153,12 @@ export default function ComparePage() {
                           {(p.seller?.businessName || p.seller?.name || '?')[0].toUpperCase()}
                         </div>
                         <div>
-                          <p className="font-medium text-gray-800">{p.seller?.businessName || p.seller?.name}</p>
+                          <div className="flex items-center gap-1.5">
+                            <p className="font-medium text-gray-800">{p.seller?.businessName || p.seller?.name}</p>
+                            {p.seller?.plan === 'premium' && (
+                              <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-medium">⚡ Premium</span>
+                            )}
+                          </div>
                           {p.seller?.address?.city && (
                             <p className="text-xs text-gray-400 flex items-center gap-0.5">
                               <FiMapPin size={10} /> {p.seller.address.city}

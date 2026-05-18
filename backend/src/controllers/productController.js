@@ -158,7 +158,7 @@ const compareProducts = asyncHandler(async (req, res) => {
   if (sides) query['printSpecs.sides'] = sides;
 
   const products = await Product.find(query)
-    .populate('seller', 'name businessName avatar rating address')
+    .populate('seller', 'name businessName avatar rating address plan')
     .populate('category', 'name slug')
     .sort({ 'price.min': 1 })
     .lean();

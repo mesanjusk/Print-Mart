@@ -9,12 +9,25 @@ connectDB();
 
 const app = express();
 
-const allowedOrigins = process.env.CLIENT_URL
-  ? [process.env.CLIENT_URL]
-  : true;
+const ALLOWED_ORIGINS = [
+  'https://app.instify.in',
+  'https://appinstifyin.vercel.app',
+  'http://localhost:5173',
+  'http://localhost:3000',
+];
+
+if (process.env.CLIENT_URL) {
+  process.env.CLIENT_URL.split(',').forEach((u) => {
+    const trimmed = u.trim();
+    if (!ALLOWED_ORIGINS.includes(trimmed)) ALLOWED_ORIGINS.push(trimmed);
+  });
+}
 
 app.use(cors({
-  origin: allowedOrigins,
+  origin: (origin, callback) => {
+    if (!origin || ALLOWED_ORIGINS.includes(origin)) return callback(null, true);
+    callback(new Error(`CORS: origin ${origin} not allowed`));
+  },
   credentials: true,
 }));
 app.use(express.json());
@@ -30,7 +43,7 @@ app.use('/api/quotations', require('./src/routes/quotationRoutes'));
 app.use('/api/whatsapp', require('./src/routes/whatsappRoutes'));
 
 app.get('/', (req, res) => {
-  res.json({ message: 'India Mart Clone API is running', status: 'ok' });
+  res.json({ message: 'PrintMart API is running', status: 'ok' });
 });
 
 app.use((err, req, res, next) => {

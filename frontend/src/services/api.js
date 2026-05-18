@@ -49,8 +49,14 @@ export const inquiryAPI = {
   create: (data) => api.post('/inquiries', data),
   getBuyerInquiries: () => api.get('/inquiries/buyer'),
   getSellerInquiries: () => api.get('/inquiries/seller'),
+  accept: (id) => api.put(`/inquiries/${id}/accept`),
   reply: (id, data) => api.post(`/inquiries/${id}/reply`, data),
   close: (id) => api.put(`/inquiries/${id}/close`),
+};
+
+export const pushAPI = {
+  subscribe: (subscription) => api.post('/push/subscribe', subscription),
+  unsubscribe: () => api.post('/push/unsubscribe'),
 };
 
 export const supplierAPI = {

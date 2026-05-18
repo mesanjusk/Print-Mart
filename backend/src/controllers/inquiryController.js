@@ -1,12 +1,10 @@
 const asyncHandler = require('express-async-handler');
 const Inquiry = require('../models/Inquiry');
 const Product = require('../models/Product');
+const User = require('../models/User');
 const Design = require('../models/Design');
-const {
-  sendInquiryNotificationToSeller,
-  sendInquiryConfirmationToBuyer,
-  broadcastInquiryToSellers,
-} = require('../services/whatsapp');
+const { sendInquiryConfirmationToBuyer } = require('../services/whatsapp');
+const { sendPush, sendPushToMany } = require('../services/pushNotification');
 
 const createInquiry = asyncHandler(async (req, res) => {
   const { productId, message, quantity, unit, designId, designFileUrl } = req.body;
@@ -15,6 +13,7 @@ const createInquiry = asyncHandler(async (req, res) => {
     res.status(404);
     throw new Error('Product not found');
   }
+
   const inquiry = await Inquiry.create({
     product: productId,
     buyer: req.user._id,
@@ -28,29 +27,27 @@ const createInquiry = asyncHandler(async (req, res) => {
   product.inquiries += 1;
   await product.save();
 
-  // Populate seller, product name and buyer for WhatsApp notifications
   await inquiry.populate([
-    { path: 'seller', select: 'name businessName phone' },
+    { path: 'seller', select: 'name businessName phone pushSubscription pushEnabled plan' },
     { path: 'product', select: 'name' },
     { path: 'buyer', select: 'name phone' },
   ]);
 
-  // Send WhatsApp notifications – errors must never break the main response
+  // 1. Push notification to the direct seller (always, regardless of plan)
   try {
-    if (inquiry.seller?.phone) {
-      await sendInquiryNotificationToSeller(
-        inquiry.seller.phone,
-        inquiry.buyer?.name || 'A buyer',
-        inquiry.product?.name || 'a product',
-        message,
-        quantity,
-        unit
-      );
+    if (inquiry.seller?.pushEnabled && inquiry.seller?.pushSubscription?.endpoint) {
+      await sendPush(inquiry.seller.pushSubscription, {
+        title: `New Inquiry — ${inquiry.product?.name}`,
+        body: `${inquiry.buyer?.name || 'A buyer'} needs ${quantity} ${unit}. Tap to view & accept.`,
+        url: '/dashboard/inquiries',
+        tag: `inquiry-${inquiry._id}`,
+      });
     }
   } catch (err) {
-    console.error('[WhatsApp] Seller notification failed:', err.message);
+    console.error('[Push] Seller notification failed:', err.message);
   }
 
+  // 2. WhatsApp confirmation to buyer (only 1 message — keep this)
   try {
     if (req.user.phone) {
       await sendInquiryConfirmationToBuyer(
@@ -63,10 +60,9 @@ const createInquiry = asyncHandler(async (req, res) => {
     console.error('[WhatsApp] Buyer confirmation failed:', err.message);
   }
 
-  // Broadcast to other sellers who offer a similar product.
-  // COST CONTROL: only premium-plan sellers are included, capped at MAX_BROADCAST.
+  // 3. Push broadcast to matching premium sellers — replaces WhatsApp broadcast (zero cost)
   try {
-    const MAX_BROADCAST = 5;
+    const MAX_BROADCAST = 10; // Can be higher since push is free
     const ps = product.printSpecs || {};
     const similarQuery = {
       _id: { $ne: product._id },
@@ -77,53 +73,52 @@ const createInquiry = asyncHandler(async (req, res) => {
     if (ps.quantity) similarQuery['printSpecs.quantity'] = ps.quantity;
     if (ps.finish) similarQuery['printSpecs.finish'] = ps.finish;
 
-    // Fetch more candidates than we need so we can filter + rank
     const similarProducts = await Product.find(similarQuery)
-      .populate('seller', 'name phone plan rating')
-      .select('seller printSpecs name rating')
-      .limit(50)
+      .select('seller rating')
+      .limit(100)
       .lean();
 
-    // De-duplicate sellers, keep premium-only, rank by rating then inquiry count
     const seenSellers = new Set([product.seller.toString()]);
-    const candidates = [];
+    const sellerIds = [];
     for (const sp of similarProducts) {
-      const sid = sp.seller?._id?.toString();
-      if (!sid || seenSellers.has(sid) || !sp.seller.phone) continue;
-      if (sp.seller.plan !== 'premium') continue; // free-tier sellers skip WhatsApp broadcast
-      seenSellers.add(sid);
-      candidates.push({
-        seller: sp.seller,
-        score: (sp.rating?.average || 0) * 10 + (sp.rating?.count || 0),
-      });
+      const sid = sp.seller?.toString();
+      if (sid && !seenSellers.has(sid)) {
+        seenSellers.add(sid);
+        sellerIds.push(sid);
+      }
     }
 
-    // Sort by score desc, take top MAX_BROADCAST
-    candidates.sort((a, b) => b.score - a.score);
-    const sellersToNotify = candidates.slice(0, MAX_BROADCAST).map((c) => c.seller);
+    if (sellerIds.length > 0) {
+      // Fetch full seller docs with push data — only premium sellers, only those with push enabled
+      const matchingSellers = await User.find({
+        _id: { $in: sellerIds },
+        plan: 'premium',
+        pushEnabled: true,
+      }).select('name pushSubscription pushEnabled rating').limit(MAX_BROADCAST);
 
-    console.log(`[WhatsApp] Broadcast: ${candidates.length} premium sellers matched, notifying top ${sellersToNotify.length}`);
+      // Rank by rating
+      matchingSellers.sort((a, b) => (b.rating?.average || 0) - (a.rating?.average || 0));
 
-    if (sellersToNotify.length > 0) {
-      inquiry.broadcastedSellers = sellersToNotify.map((s) => s._id);
-      await inquiry.save();
+      if (matchingSellers.length > 0) {
+        inquiry.broadcastedSellers = matchingSellers.map((s) => s._id);
+        await inquiry.save();
 
-      await broadcastInquiryToSellers(sellersToNotify, {
-        productName: inquiry.product?.name,
-        category: product.category,
-        quantity,
-        unit,
-        finish: ps.finish,
-        size: ps.size,
-        paperWeight: ps.paperWeight,
-        deliveryDays: ps.deliveryDays,
-      }, inquiry.buyer?.name || 'A buyer');
+        await sendPushToMany(matchingSellers, {
+          title: `New Lead — ${inquiry.product?.name}`,
+          body: `${quantity} ${unit} needed. Be the first to accept!`,
+          url: '/dashboard/inquiries',
+          tag: `broadcast-${inquiry._id}`,
+        }, (expiredId) => {
+          User.findByIdAndUpdate(expiredId, { pushEnabled: false, pushSubscription: null }).catch(() => {});
+        });
+
+        console.log(`[Push] Broadcast sent to ${matchingSellers.length} premium sellers.`);
+      }
     }
   } catch (err) {
-    console.error('[WhatsApp] Broadcast failed:', err.message);
+    console.error('[Push] Broadcast failed:', err.message);
   }
 
-  // Update design usedCount if a design was attached
   if (designId) {
     Design.findByIdAndUpdate(designId, { $inc: { usedCount: 1 }, lastUsedProduct: productId }).catch(() => {});
   }
@@ -140,11 +135,76 @@ const getBuyerInquiries = asyncHandler(async (req, res) => {
 });
 
 const getSellerInquiries = asyncHandler(async (req, res) => {
-  const inquiries = await Inquiry.find({ seller: req.user._id })
+  // Seller sees both: inquiries on their products AND ones they were broadcasted
+  const inquiries = await Inquiry.find({
+    $or: [
+      { seller: req.user._id },
+      { broadcastedSellers: req.user._id },
+    ],
+  })
     .populate('product', 'name images slug')
     .populate('buyer', 'name email phone')
     .sort({ createdAt: -1 });
   res.json(inquiries);
+});
+
+/**
+ * PUT /api/inquiries/:id/accept
+ * Seller signals they can fulfil this inquiry.
+ * Sends a push to the buyer so they can WhatsApp the seller directly.
+ * Seller's personal WhatsApp — zero API cost.
+ */
+const acceptInquiry = asyncHandler(async (req, res) => {
+  const inquiry = await Inquiry.findById(req.params.id)
+    .populate('buyer', 'name phone pushSubscription pushEnabled')
+    .populate('product', 'name');
+
+  if (!inquiry) {
+    res.status(404);
+    throw new Error('Inquiry not found');
+  }
+
+  const seller = req.user;
+
+  // Must be direct seller or a broadcasted seller
+  const isDirectSeller = inquiry.seller.toString() === seller._id.toString();
+  const isBroadcasted = inquiry.broadcastedSellers.some(
+    (id) => id.toString() === seller._id.toString()
+  );
+  if (!isDirectSeller && !isBroadcasted) {
+    res.status(403);
+    throw new Error('Not authorized to accept this inquiry');
+  }
+
+  // Idempotent — don't double-add
+  const already = inquiry.sellerInterests.some(
+    (i) => i.seller.toString() === seller._id.toString()
+  );
+  if (!already) {
+    inquiry.sellerInterests.push({
+      seller: seller._id,
+      sellerName: seller.name,
+      sellerBusiness: seller.businessName || seller.name,
+      sellerPhone: seller.phone || '',
+    });
+    await inquiry.save();
+  }
+
+  // Notify buyer via push — they tap it to WhatsApp the seller (user-initiated, free)
+  try {
+    if (inquiry.buyer?.pushEnabled && inquiry.buyer?.pushSubscription?.endpoint) {
+      await sendPush(inquiry.buyer.pushSubscription, {
+        title: '🎉 Seller is Ready!',
+        body: `${seller.businessName || seller.name} can fulfil your ${inquiry.product?.name} order. Tap to contact them.`,
+        url: '/dashboard/inquiries',
+        tag: `seller-ready-${inquiry._id}-${seller._id}`,
+      });
+    }
+  } catch (err) {
+    console.error('[Push] Buyer acceptance notification failed:', err.message);
+  }
+
+  res.json({ message: 'Accepted', sellerInterests: inquiry.sellerInterests });
 });
 
 const replyInquiry = asyncHandler(async (req, res) => {
@@ -179,4 +239,11 @@ const closeInquiry = asyncHandler(async (req, res) => {
   res.json(inquiry);
 });
 
-module.exports = { createInquiry, getBuyerInquiries, getSellerInquiries, replyInquiry, closeInquiry };
+module.exports = {
+  createInquiry,
+  getBuyerInquiries,
+  getSellerInquiries,
+  acceptInquiry,
+  replyInquiry,
+  closeInquiry,
+};

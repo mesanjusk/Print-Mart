@@ -5,6 +5,7 @@ import { productAPI, inquiryAPI, supplierAPI } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import Spinner from '../common/Spinner';
 import PremiumBanner from './PremiumBanner';
+import NotificationSetup from './NotificationSetup';
 
 export default function DashboardHome() {
   const { user } = useAuth();
@@ -40,6 +41,7 @@ export default function DashboardHome() {
     <div>
       <h1 className="text-xl font-bold text-gray-800 mb-4">Dashboard</h1>
       <PremiumBanner />
+      {user?.role === 'seller' && <NotificationSetup />}
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
         {cards.map((card) => (

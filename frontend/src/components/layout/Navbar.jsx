@@ -59,7 +59,7 @@ export default function Navbar() {
                   className="flex items-center gap-1 text-gray-700 hover:text-green-600"
                 >
                   <FiUser size={18} />
-                  <span className="font-medium">{user.name.split(' ')[0]}</span>
+                  <span className="font-medium">{(user.name || '').split(' ')[0] || 'User'}</span>
                 </button>
                 {userMenuOpen && (
                   <div className="absolute right-0 mt-2 w-48 bg-white border rounded-lg shadow-lg z-10">

@@ -1,6 +1,7 @@
 const asyncHandler = require('express-async-handler');
 const Inquiry = require('../models/Inquiry');
 const Product = require('../models/Product');
+const { sendInquiryNotificationToSeller, sendInquiryConfirmationToBuyer } = require('../services/whatsapp');
 
 const createInquiry = asyncHandler(async (req, res) => {
   const { productId, message, quantity, unit } = req.body;
@@ -19,6 +20,42 @@ const createInquiry = asyncHandler(async (req, res) => {
   });
   product.inquiries += 1;
   await product.save();
+
+  // Populate seller, product name and buyer for WhatsApp notifications
+  await inquiry.populate([
+    { path: 'seller', select: 'name businessName phone' },
+    { path: 'product', select: 'name' },
+    { path: 'buyer', select: 'name phone' },
+  ]);
+
+  // Send WhatsApp notifications – errors must never break the main response
+  try {
+    if (inquiry.seller?.phone) {
+      await sendInquiryNotificationToSeller(
+        inquiry.seller.phone,
+        inquiry.buyer?.name || 'A buyer',
+        inquiry.product?.name || 'a product',
+        message,
+        quantity,
+        unit
+      );
+    }
+  } catch (err) {
+    console.error('[WhatsApp] Seller notification failed:', err.message);
+  }
+
+  try {
+    if (req.user.phone) {
+      await sendInquiryConfirmationToBuyer(
+        req.user.phone,
+        inquiry.product?.name || 'the product',
+        inquiry.seller?.businessName || inquiry.seller?.name || 'the seller'
+      );
+    }
+  } catch (err) {
+    console.error('[WhatsApp] Buyer confirmation failed:', err.message);
+  }
+
   res.status(201).json(inquiry);
 });
 

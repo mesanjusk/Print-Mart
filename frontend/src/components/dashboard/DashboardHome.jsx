@@ -31,7 +31,7 @@ export default function DashboardHome() {
 
   const cards = [
     ...(user?.role === 'seller' ? [{ icon: <FiPackage size={24} />, count: stats.products, label: 'My Products', to: '/dashboard/products', color: 'blue' }] : []),
-    { icon: <FiMessageSquare size={24} />, count: stats.inquiries, label: 'Inquiries', to: '/dashboard/inquiries', color: 'orange' },
+    { icon: <FiMessageSquare size={24} />, count: stats.inquiries, label: 'Inquiries', to: '/dashboard/inquiries', color: 'green' },
     { icon: <FiHeart size={24} />, count: stats.saved, label: 'Saved Products', to: '/dashboard/saved', color: 'red' },
   ];
 
@@ -41,8 +41,8 @@ export default function DashboardHome() {
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
         {cards.map((card) => (
-          <Link key={card.label} to={card.to} className="card p-5 hover:border-orange-300 border transition-colors flex items-center gap-4">
-            <div className={`w-12 h-12 rounded-full flex items-center justify-center ${card.color === 'orange' ? 'bg-orange-100 text-orange-600' : card.color === 'blue' ? 'bg-blue-100 text-blue-600' : 'bg-red-100 text-red-600'}`}>
+          <Link key={card.label} to={card.to} className="card p-5 hover:border-green-400 border transition-colors flex items-center gap-4">
+            <div className={`w-12 h-12 rounded-full flex items-center justify-center ${card.color === 'green' ? 'bg-green-100 text-green-700' : card.color === 'blue' ? 'bg-blue-100 text-blue-600' : 'bg-red-100 text-red-600'}`}>
               {card.icon}
             </div>
             <div>

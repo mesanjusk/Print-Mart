@@ -27,7 +27,7 @@ export default function ProductCard({ product }) {
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
         />
         {product.featured && (
-          <span className="absolute top-2 left-2 badge bg-orange-500 text-white">Featured</span>
+          <span className="absolute top-2 left-2 badge bg-green-600 text-white">Featured</span>
         )}
         <button
           onClick={handleSave}
@@ -38,7 +38,7 @@ export default function ProductCard({ product }) {
       </div>
       <div className="p-3">
         <h3 className="font-medium text-gray-800 text-sm line-clamp-2 mb-1">{product.name}</h3>
-        <p className="text-orange-500 font-bold text-sm mb-1">
+        <p className="text-green-600 font-bold text-sm mb-1">
           ₹{product.price?.min?.toLocaleString()}
           {product.price?.max && ` – ₹${product.price.max.toLocaleString()}`}
           <span className="text-gray-400 font-normal text-xs"> / {product.price?.unit}</span>

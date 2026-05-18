@@ -51,6 +51,7 @@ export default function Navbar() {
 
           <nav className="hidden md:flex items-center gap-4 text-sm">
             <Link to="/products" className="text-gray-600 hover:text-green-600 font-medium">Products</Link>
+            <Link to="/compare" className="text-gray-600 hover:text-green-600 font-medium">Compare Prices</Link>
             <Link to="/suppliers" className="text-gray-600 hover:text-green-600 font-medium">Suppliers</Link>
             {user ? (
               <div className="relative">
@@ -98,6 +99,7 @@ export default function Navbar() {
       {menuOpen && (
         <div className="md:hidden bg-white border-t px-4 py-3 space-y-2">
           <Link to="/products" onClick={() => setMenuOpen(false)} className="block py-2 text-gray-700 hover:text-green-600">Products</Link>
+          <Link to="/compare" onClick={() => setMenuOpen(false)} className="block py-2 text-gray-700 hover:text-green-600">Compare Prices</Link>
           <Link to="/suppliers" onClick={() => setMenuOpen(false)} className="block py-2 text-gray-700 hover:text-green-600">Suppliers</Link>
           {user ? (
             <>

@@ -1,10 +1,15 @@
 const asyncHandler = require('express-async-handler');
 const Inquiry = require('../models/Inquiry');
 const Product = require('../models/Product');
-const { sendInquiryNotificationToSeller, sendInquiryConfirmationToBuyer } = require('../services/whatsapp');
+const Design = require('../models/Design');
+const {
+  sendInquiryNotificationToSeller,
+  sendInquiryConfirmationToBuyer,
+  broadcastInquiryToSellers,
+} = require('../services/whatsapp');
 
 const createInquiry = asyncHandler(async (req, res) => {
-  const { productId, message, quantity, unit } = req.body;
+  const { productId, message, quantity, unit, designId, designFileUrl } = req.body;
   const product = await Product.findById(productId);
   if (!product) {
     res.status(404);
@@ -17,6 +22,8 @@ const createInquiry = asyncHandler(async (req, res) => {
     message,
     quantity,
     unit,
+    design: designId || undefined,
+    designFileUrl: designFileUrl || undefined,
   });
   product.inquiries += 1;
   await product.save();
@@ -54,6 +61,58 @@ const createInquiry = asyncHandler(async (req, res) => {
     }
   } catch (err) {
     console.error('[WhatsApp] Buyer confirmation failed:', err.message);
+  }
+
+  // Broadcast to other sellers who offer a similar product (same category + matching printSpecs)
+  try {
+    const ps = product.printSpecs || {};
+    const similarQuery = {
+      _id: { $ne: product._id },
+      seller: { $ne: product.seller },
+      category: product.category,
+      isActive: true,
+    };
+    if (ps.quantity) similarQuery['printSpecs.quantity'] = ps.quantity;
+    if (ps.finish) similarQuery['printSpecs.finish'] = ps.finish;
+
+    const similarProducts = await Product.find(similarQuery)
+      .populate('seller', 'name phone')
+      .select('seller printSpecs name')
+      .limit(10)
+      .lean();
+
+    const sellersToNotify = [];
+    const seenSellers = new Set([product.seller.toString()]);
+    for (const sp of similarProducts) {
+      const sid = sp.seller?._id?.toString();
+      if (sid && !seenSellers.has(sid) && sp.seller.phone) {
+        seenSellers.add(sid);
+        sellersToNotify.push(sp.seller);
+      }
+    }
+
+    if (sellersToNotify.length > 0) {
+      inquiry.broadcastedSellers = sellersToNotify.map((s) => s._id);
+      await inquiry.save();
+
+      await broadcastInquiryToSellers(sellersToNotify, {
+        productName: inquiry.product?.name,
+        category: product.category,
+        quantity,
+        unit,
+        finish: ps.finish,
+        size: ps.size,
+        paperWeight: ps.paperWeight,
+        deliveryDays: ps.deliveryDays,
+      }, inquiry.buyer?.name || 'A buyer');
+    }
+  } catch (err) {
+    console.error('[WhatsApp] Broadcast failed:', err.message);
+  }
+
+  // Update design usedCount if a design was attached
+  if (designId) {
+    Design.findByIdAndUpdate(designId, { $inc: { usedCount: 1 }, lastUsedProduct: productId }).catch(() => {});
   }
 
   res.status(201).json(inquiry);

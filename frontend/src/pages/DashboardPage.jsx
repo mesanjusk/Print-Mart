@@ -1,5 +1,5 @@
 import { Routes, Route, Link, NavLink, useNavigate } from 'react-router-dom';
-import { FiGrid, FiPackage, FiMessageSquare, FiHeart, FiUser, FiPlus, FiFileText } from 'react-icons/fi';
+import { FiGrid, FiPackage, FiMessageSquare, FiHeart, FiUser, FiFileText, FiImage } from 'react-icons/fi';
 import { useAuth } from '../context/AuthContext';
 import DashboardHome from '../components/dashboard/DashboardHome';
 import ManageProducts from '../components/dashboard/ManageProducts';
@@ -7,11 +7,13 @@ import Inquiries from '../components/dashboard/Inquiries';
 import SavedProducts from '../components/dashboard/SavedProducts';
 import ProfileSettings from '../components/dashboard/ProfileSettings';
 import Quotations from '../components/dashboard/Quotations';
+import DesignLibrary from '../components/dashboard/DesignLibrary';
 
 const navItems = [
   { to: '/dashboard', icon: <FiGrid />, label: 'Overview', exact: true },
   { to: '/dashboard/inquiries', icon: <FiMessageSquare />, label: 'Inquiries' },
   { to: '/dashboard/quotations', icon: <FiFileText />, label: 'Quotations' },
+  { to: '/dashboard/designs', icon: <FiImage />, label: 'My Designs' },
   { to: '/dashboard/saved', icon: <FiHeart />, label: 'Saved' },
   { to: '/dashboard/profile', icon: <FiUser />, label: 'Profile' },
 ];
@@ -54,6 +56,7 @@ export default function DashboardPage() {
             {user?.role === 'seller' && <Route path="products/*" element={<ManageProducts />} />}
             <Route path="inquiries" element={<Inquiries />} />
             <Route path="quotations" element={<Quotations />} />
+            <Route path="designs" element={<DesignLibrary />} />
             <Route path="saved" element={<SavedProducts />} />
             <Route path="profile" element={<ProfileSettings />} />
           </Routes>

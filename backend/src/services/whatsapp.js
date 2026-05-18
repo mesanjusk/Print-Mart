@@ -127,6 +127,54 @@ const sendQuotationToClient = async (clientPhone, quotationDetails) => {
 };
 
 /**
+ * Notify a seller that the buyer replied to their inquiry via WhatsApp.
+ */
+const sendBuyerReplyNotificationToSeller = async (sellerPhone, buyerName, productName, replyText) => {
+  if (!sellerPhone) return null;
+
+  const body =
+    `*Buyer Replied – PrintMart*\n\n` +
+    `*${buyerName}* has replied to the inquiry for *${productName}*.\n\n` +
+    `*Message:* ${replyText}\n\n` +
+    `Log in to PrintMart to respond.`;
+
+  return sendTextMessage(sellerPhone, body);
+};
+
+/**
+ * Broadcast a buyer's inquiry to multiple sellers who offer a similar product.
+ * @param {Array} sellers  Array of { name, phone } objects
+ * @param {object} specs   { productName, category, quantity, unit, finish, size, deliveryDays }
+ * @param {string} buyerName
+ */
+const broadcastInquiryToSellers = async (sellers, specs, buyerName) => {
+  if (!sellers || sellers.length === 0) return;
+
+  const specLines = [
+    specs.quantity ? `*Quantity:* ${specs.quantity} ${specs.unit || 'pcs'}` : null,
+    specs.finish ? `*Finish:* ${specs.finish}` : null,
+    specs.size ? `*Size:* ${specs.size}` : null,
+    specs.paperWeight ? `*Paper:* ${specs.paperWeight} gsm` : null,
+    specs.deliveryDays ? `*Delivery needed in:* ${specs.deliveryDays} days` : null,
+  ].filter(Boolean).join('\n');
+
+  const body =
+    `*New Inquiry Broadcast – PrintMart*\n\n` +
+    `A buyer (*${buyerName}*) is looking for:\n` +
+    `*Product:* ${specs.productName || specs.category}\n` +
+    `${specLines}\n\n` +
+    `If you can fulfill this order, log in to PrintMart and send a quotation.\n` +
+    `The buyer will compare prices from all responding sellers.`;
+
+  const results = await Promise.allSettled(
+    sellers.map((s) => s.phone ? sendTextMessage(s.phone, body) : Promise.resolve(null))
+  );
+
+  const sent = results.filter((r) => r.status === 'fulfilled' && r.value).length;
+  console.log(`[WhatsApp] Broadcast sent to ${sent}/${sellers.length} sellers.`);
+};
+
+/**
  * Verify the WhatsApp webhook challenge.
  * Returns the challenge string on success, or null on failure.
  */
@@ -146,5 +194,7 @@ module.exports = {
   sendInquiryNotificationToSeller,
   sendInquiryConfirmationToBuyer,
   sendQuotationToClient,
+  sendBuyerReplyNotificationToSeller,
+  broadcastInquiryToSellers,
   verifyWebhook,
 };

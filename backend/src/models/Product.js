@@ -26,6 +26,16 @@ const productSchema = new mongoose.Schema({
     count: { type: Number, default: 0 },
   },
   isActive: { type: Boolean, default: true },
+  // Structured print specs for price comparison
+  printSpecs: {
+    paperWeight: { type: Number },           // gsm: 130, 250, 300, 350
+    size: { type: String },                  // 'standard', 'A4', 'A5', '12x18ft', custom
+    finish: { type: String, enum: ['matte', 'glossy', 'uncoated', 'soft-touch', 'uv', 'other'] },
+    quantity: { type: Number },              // standard: 100, 250, 500, 1000, 5000
+    sides: { type: String, enum: ['single', 'double', 'na'] },
+    deliveryDays: { type: Number },          // 1, 2, 3, 5, 7
+    material: { type: String },              // for banners/gifts: flex, vinyl, plastic, metal
+  },
 }, { timestamps: true });
 
 productSchema.pre('save', function (next) {

@@ -41,6 +41,7 @@ app.use('/api/inquiries', require('./src/routes/inquiryRoutes'));
 app.use('/api/suppliers', require('./src/routes/supplierRoutes'));
 app.use('/api/quotations', require('./src/routes/quotationRoutes'));
 app.use('/api/whatsapp', require('./src/routes/whatsappRoutes'));
+app.use('/api/designs', require('./src/routes/designRoutes'));
 
 app.get('/', (req, res) => {
   res.json({ message: 'PrintMart API is running', status: 'ok' });

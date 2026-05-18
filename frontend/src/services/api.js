@@ -69,4 +69,15 @@ export const quotationAPI = {
   updateStatus: (id, status) => api.put(`/quotations/${id}/status`, { status }),
 };
 
+export const compareAPI = {
+  compare: (params) => api.get('/products/compare', { params }),
+  updatePrintSpecs: (id, specs) => api.put(`/products/${id}/print-specs`, specs),
+};
+
+export const designAPI = {
+  upload: (formData) => api.post('/designs', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  getAll: () => api.get('/designs'),
+  remove: (id) => api.delete(`/designs/${id}`),
+};
+
 export default api;

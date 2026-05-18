@@ -1,6 +1,6 @@
 const Inquiry = require('../models/Inquiry');
 const User = require('../models/User');
-const { verifyWebhook } = require('../services/whatsapp');
+const { verifyWebhook, sendBuyerReplyNotificationToSeller } = require('../services/whatsapp');
 
 /**
  * GET /api/whatsapp/webhook
@@ -75,6 +75,25 @@ const webhookReceive = async (req, res) => {
         });
         await inquiry.save();
         console.log(`[WhatsApp] Saved reply to inquiry ${inquiry._id}`);
+
+        // Notify the seller that the buyer replied via WhatsApp
+        try {
+          await inquiry.populate([
+            { path: 'seller', select: 'name phone' },
+            { path: 'buyer', select: 'name' },
+            { path: 'product', select: 'name' },
+          ]);
+          if (inquiry.seller?.phone) {
+            await sendBuyerReplyNotificationToSeller(
+              inquiry.seller.phone,
+              inquiry.buyer?.name || 'A buyer',
+              inquiry.product?.name || 'your product',
+              text
+            );
+          }
+        } catch (notifyErr) {
+          console.error('[WhatsApp] Seller reply notification failed:', notifyErr.message);
+        }
       } else {
         console.log(`[WhatsApp] No open inquiry found for buyer ${buyer._id}.`);
       }

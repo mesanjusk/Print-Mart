@@ -17,6 +17,11 @@ const inquirySchema = new mongoose.Schema({
     message: { type: String },
     createdAt: { type: Date, default: Date.now },
   }],
+  // Design file uploaded by buyer
+  design: { type: mongoose.Schema.Types.ObjectId, ref: 'Design' },
+  designFileUrl: { type: String },
+  // Other sellers notified about this inquiry for price comparison
+  broadcastedSellers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
 }, { timestamps: true });
 
 module.exports = mongoose.model('Inquiry', inquirySchema);

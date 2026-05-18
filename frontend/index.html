@@ -4,11 +4,19 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="India Mart Clone - B2B Marketplace connecting buyers and sellers across India" />
-    <title>IndiaMart Clone - B2B Marketplace</title>
+    <meta name="description" content="PrintMart - India's #1 Printing & Customization Marketplace" />
+    <title>PrintMart - Printing & Customization Marketplace</title>
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
+    <script>
+      if (window.location.search.includes('debug=true')) {
+        var s = document.createElement('script');
+        s.src = 'https://cdn.jsdelivr.net/npm/eruda';
+        document.head.appendChild(s);
+        s.onload = function () { eruda.init(); };
+      }
+    </script>
   </body>
 </html>

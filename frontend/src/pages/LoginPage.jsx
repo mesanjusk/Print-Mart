@@ -27,11 +27,11 @@ export default function LoginPage() {
     <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4 py-12">
       <div className="max-w-md w-full">
         <div className="text-center mb-8">
-          <div className="w-14 h-14 bg-orange-500 rounded-full flex items-center justify-center mx-auto mb-3">
-            <span className="text-white font-bold text-xl">IM</span>
+          <div className="w-14 h-14 bg-green-600 rounded-full flex items-center justify-center mx-auto mb-3">
+            <span className="text-white font-bold text-xl">PM</span>
           </div>
           <h1 className="text-2xl font-bold text-gray-800">Welcome back</h1>
-          <p className="text-gray-500 text-sm mt-1">Login to your IndiaMart account</p>
+          <p className="text-gray-500 text-sm mt-1">Login to your PrintMart account</p>
         </div>
         <div className="card p-8">
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -53,7 +53,7 @@ export default function LoginPage() {
           </form>
           <p className="text-center text-sm text-gray-500 mt-4">
             Don't have an account?{' '}
-            <Link to="/register" className="text-orange-500 hover:text-orange-600 font-medium">Register</Link>
+            <Link to="/register" className="text-green-600 hover:text-green-700 font-medium">Register</Link>
           </p>
         </div>
       </div>

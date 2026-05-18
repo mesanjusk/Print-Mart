@@ -34,7 +34,7 @@ export default function SuppliersPage() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
-      <h1 className="text-2xl font-bold text-gray-800 mb-6">Find Suppliers</h1>
+      <h1 className="text-2xl font-bold text-gray-800 mb-6">Find Printing Suppliers</h1>
 
       <form onSubmit={handleSearch} className="flex gap-3 mb-8 max-w-lg">
         <input type="text" value={keyword} onChange={(e) => setKeyword(e.target.value)}
@@ -55,9 +55,9 @@ export default function SuppliersPage() {
         <>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
             {suppliers.map((s) => (
-              <Link key={s._id} to={`/suppliers/${s._id}`} className="card p-5 hover:border-orange-300 border transition-colors">
+              <Link key={s._id} to={`/suppliers/${s._id}`} className="card p-5 hover:border-green-400 border transition-colors">
                 <div className="flex items-center gap-3 mb-3">
-                  <div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center text-orange-600 font-bold text-xl flex-shrink-0">
+                  <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center text-green-700 font-bold text-xl flex-shrink-0">
                     {(s.businessName || s.name)?.[0]?.toUpperCase()}
                   </div>
                   <div className="overflow-hidden">
@@ -75,7 +75,7 @@ export default function SuppliersPage() {
                 )}
                 <div className="mt-3 pt-3 border-t flex items-center justify-between text-xs text-gray-400">
                   <span>Member since {new Date(s.createdAt).getFullYear()}</span>
-                  <span className="text-orange-500 font-medium">View Profile →</span>
+                  <span className="text-green-600 font-medium">View Profile →</span>
                 </div>
               </Link>
             ))}
@@ -85,7 +85,7 @@ export default function SuppliersPage() {
             <div className="flex justify-center gap-2 mt-8">
               {Array.from({ length: pagination.pages }, (_, i) => i + 1).map((p) => (
                 <button key={p} onClick={() => { const sp = new URLSearchParams(searchParams); sp.set('page', p); setSearchParams(sp); }}
-                  className={`w-9 h-9 rounded text-sm font-medium ${p === pagination.page ? 'bg-orange-500 text-white' : 'bg-white border text-gray-600 hover:border-orange-400'}`}>
+                  className={`w-9 h-9 rounded text-sm font-medium ${p === pagination.page ? 'bg-green-600 text-white' : 'bg-white border text-gray-600 hover:border-green-500'}`}>
                   {p}
                 </button>
               ))}

@@ -48,7 +48,7 @@ function ProductList() {
                 className="w-14 h-14 object-cover rounded flex-shrink-0" />
               <div className="flex-grow min-w-0">
                 <h3 className="font-medium text-gray-800 truncate">{p.name}</h3>
-                <p className="text-orange-500 text-sm font-semibold">₹{p.price?.min?.toLocaleString()} / {p.price?.unit}</p>
+                <p className="text-green-600 text-sm font-semibold">₹{p.price?.min?.toLocaleString()} / {p.price?.unit}</p>
                 <div className="flex items-center gap-2 mt-1">
                   <span className={`badge ${p.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
                     {p.isActive ? 'Active' : 'Inactive'}
@@ -58,7 +58,7 @@ function ProductList() {
               </div>
               <div className="flex gap-2 flex-shrink-0">
                 <Link to={`/products/${p.slug}`} className="p-2 text-gray-400 hover:text-blue-500 rounded hover:bg-blue-50"><FiEye size={16} /></Link>
-                <Link to={`/dashboard/products/edit/${p._id}`} className="p-2 text-gray-400 hover:text-orange-500 rounded hover:bg-orange-50"><FiEdit2 size={16} /></Link>
+                <Link to={`/dashboard/products/edit/${p._id}`} className="p-2 text-gray-400 hover:text-green-600 rounded hover:bg-green-50"><FiEdit2 size={16} /></Link>
                 <button onClick={() => handleDelete(p._id)} className="p-2 text-gray-400 hover:text-red-500 rounded hover:bg-red-50"><FiTrash2 size={16} /></button>
               </div>
             </div>
@@ -121,7 +121,7 @@ function ProductForm({ editId }) {
   return (
     <div>
       <div className="flex items-center gap-3 mb-4">
-        <Link to="/dashboard/products" className="text-sm text-gray-500 hover:text-orange-500">← Back</Link>
+        <Link to="/dashboard/products" className="text-sm text-gray-500 hover:text-green-600">← Back</Link>
         <h1 className="text-xl font-bold text-gray-800">{editId ? 'Edit Product' : 'Add New Product'}</h1>
       </div>
       <div className="card p-6 max-w-2xl">
@@ -180,14 +180,14 @@ function ProductForm({ editId }) {
                 <button type="button" onClick={() => setSpecRows(specRows.filter((_, j) => j !== i))} className="text-red-400 hover:text-red-600 px-2">✕</button>
               </div>
             ))}
-            <button type="button" onClick={() => setSpecRows([...specRows, { key: '', value: '' }])} className="text-sm text-orange-500 hover:text-orange-600">+ Add Spec</button>
+            <button type="button" onClick={() => setSpecRows([...specRows, { key: '', value: '' }])} className="text-sm text-green-600 hover:text-green-700">+ Add Spec</button>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Product Images</label>
             <input type="file" name="images" multiple accept="image/*" className="input py-1.5 text-sm" />
           </div>
           <div className="flex items-center gap-2">
-            <input type="checkbox" id="featured" checked={form.featured} onChange={(e) => setForm({ ...form, featured: e.target.checked })} name="featured" className="w-4 h-4 accent-orange-500" />
+            <input type="checkbox" id="featured" checked={form.featured} onChange={(e) => setForm({ ...form, featured: e.target.checked })} name="featured" className="w-4 h-4 accent-green-600" />
             <label htmlFor="featured" className="text-sm text-gray-700">Mark as Featured</label>
           </div>
           <button type="submit" disabled={loading} className="btn-primary w-full py-2.5">

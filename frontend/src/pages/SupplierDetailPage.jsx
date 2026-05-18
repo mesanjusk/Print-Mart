@@ -25,7 +25,7 @@ export default function SupplierDetailPage() {
     <div className="max-w-7xl mx-auto px-4 py-8">
       <div className="card p-6 mb-8">
         <div className="flex flex-col sm:flex-row gap-5 items-start">
-          <div className="w-20 h-20 bg-orange-100 rounded-full flex items-center justify-center text-orange-600 font-bold text-3xl flex-shrink-0">
+          <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center text-green-700 font-bold text-3xl flex-shrink-0">
             {(supplier.businessName || supplier.name)?.[0]?.toUpperCase()}
           </div>
           <div className="flex-grow">

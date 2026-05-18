@@ -36,17 +36,17 @@ export default function RegisterPage() {
     <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4 py-12">
       <div className="max-w-md w-full">
         <div className="text-center mb-8">
-          <div className="w-14 h-14 bg-orange-500 rounded-full flex items-center justify-center mx-auto mb-3">
-            <span className="text-white font-bold text-xl">IM</span>
+          <div className="w-14 h-14 bg-green-600 rounded-full flex items-center justify-center mx-auto mb-3">
+            <span className="text-white font-bold text-xl">PM</span>
           </div>
           <h1 className="text-2xl font-bold text-gray-800">Create Account</h1>
-          <p className="text-gray-500 text-sm mt-1">Join India's largest B2B marketplace</p>
+          <p className="text-gray-500 text-sm mt-1">Join India's largest printing marketplace</p>
         </div>
         <div className="card p-8">
           <div className="flex gap-2 mb-6 p-1 bg-gray-100 rounded-lg">
             {['buyer', 'seller'].map((r) => (
               <button key={r} onClick={() => setForm({ ...form, role: r })}
-                className={`flex-1 py-2 rounded-md text-sm font-medium capitalize transition-colors ${form.role === r ? 'bg-orange-500 text-white shadow' : 'text-gray-600 hover:text-gray-800'}`}>
+                className={`flex-1 py-2 rounded-md text-sm font-medium capitalize transition-colors ${form.role === r ? 'bg-green-600 text-white shadow' : 'text-gray-600 hover:text-gray-800'}`}>
                 I'm a {r}
               </button>
             ))}
@@ -90,7 +90,7 @@ export default function RegisterPage() {
           </form>
           <p className="text-center text-sm text-gray-500 mt-4">
             Already have an account?{' '}
-            <Link to="/login" className="text-orange-500 hover:text-orange-600 font-medium">Login</Link>
+            <Link to="/login" className="text-green-600 hover:text-green-700 font-medium">Login</Link>
           </p>
         </div>
       </div>

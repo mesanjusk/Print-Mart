@@ -47,7 +47,7 @@ export default function Inquiries() {
         <div className="flex gap-2 mb-4">
           {['buyer', 'seller'].map((tab) => (
             <button key={tab} onClick={() => setActiveTab(tab)}
-              className={`px-4 py-2 rounded text-sm font-medium capitalize ${activeTab === tab ? 'bg-orange-500 text-white' : 'bg-white border text-gray-600 hover:border-orange-400'}`}>
+              className={`px-4 py-2 rounded text-sm font-medium capitalize ${activeTab === tab ? 'bg-green-600 text-white' : 'bg-white border text-gray-600 hover:border-green-500'}`}>
               {tab === 'buyer' ? 'My Inquiries' : 'Received Inquiries'}
             </button>
           ))}
@@ -72,7 +72,7 @@ export default function Inquiries() {
                   <p className="text-xs text-gray-400 mt-1">Qty: {inq.quantity} {inq.unit} • {new Date(inq.createdAt).toLocaleDateString()}</p>
                 </div>
                 <button onClick={() => setExpanded(expanded === inq._id ? null : inq._id)}
-                  className="text-xs text-orange-500 hover:text-orange-600 flex-shrink-0">
+                  className="text-xs text-green-600 hover:text-green-700 flex-shrink-0">
                   {expanded === inq._id ? 'Hide' : 'View'} Thread
                 </button>
               </div>
@@ -80,7 +80,7 @@ export default function Inquiries() {
               {expanded === inq._id && (
                 <div className="mt-3 border-t pt-3 space-y-2">
                   {inq.replies?.map((r, i) => (
-                    <div key={i} className={`text-sm p-2 rounded ${r.sender === user._id ? 'bg-orange-50 ml-8' : 'bg-gray-50'}`}>
+                    <div key={i} className={`text-sm p-2 rounded ${r.sender === user._id ? 'bg-green-50 ml-8' : 'bg-gray-50'}`}>
                       <p className="text-gray-600">{r.message}</p>
                       <p className="text-xs text-gray-400 mt-0.5">{new Date(r.createdAt).toLocaleString()}</p>
                     </div>

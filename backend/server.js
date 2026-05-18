@@ -26,6 +26,8 @@ app.use('/api/products', require('./src/routes/productRoutes'));
 app.use('/api/categories', require('./src/routes/categoryRoutes'));
 app.use('/api/inquiries', require('./src/routes/inquiryRoutes'));
 app.use('/api/suppliers', require('./src/routes/supplierRoutes'));
+app.use('/api/quotations', require('./src/routes/quotationRoutes'));
+app.use('/api/whatsapp', require('./src/routes/whatsappRoutes'));
 
 app.get('/', (req, res) => {
   res.json({ message: 'India Mart Clone API is running', status: 'ok' });

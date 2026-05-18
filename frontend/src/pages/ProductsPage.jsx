@@ -83,12 +83,12 @@ export default function ProductsPage() {
               <h4 className="text-sm font-medium text-gray-700 mb-2">Categories</h4>
               <div className="space-y-1 max-h-48 overflow-y-auto">
                 <button onClick={() => updateFilter('category', '')}
-                  className={`block w-full text-left text-sm px-2 py-1 rounded ${!category ? 'text-orange-500 bg-orange-50' : 'text-gray-600 hover:bg-gray-50'}`}>
+                  className={`block w-full text-left text-sm px-2 py-1 rounded ${!category ? 'text-green-600 bg-green-50' : 'text-gray-600 hover:bg-gray-50'}`}>
                   All Categories
                 </button>
                 {categories.map((cat) => (
                   <button key={cat._id} onClick={() => updateFilter('category', cat._id)}
-                    className={`block w-full text-left text-sm px-2 py-1 rounded ${category === cat._id ? 'text-orange-500 bg-orange-50' : 'text-gray-600 hover:bg-gray-50'}`}>
+                    className={`block w-full text-left text-sm px-2 py-1 rounded ${category === cat._id ? 'text-green-600 bg-green-50' : 'text-gray-600 hover:bg-gray-50'}`}>
                     {cat.name}
                   </button>
                 ))}
@@ -135,7 +135,7 @@ export default function ProductsPage() {
                 <div className="flex justify-center gap-2 mt-8">
                   {Array.from({ length: pagination.pages }, (_, i) => i + 1).map((p) => (
                     <button key={p} onClick={() => updateFilter('page', p)}
-                      className={`w-9 h-9 rounded text-sm font-medium ${p === pagination.page ? 'bg-orange-500 text-white' : 'bg-white border text-gray-600 hover:border-orange-400'}`}>
+                      className={`w-9 h-9 rounded text-sm font-medium ${p === pagination.page ? 'bg-green-600 text-white' : 'bg-white border text-gray-600 hover:border-green-500'}`}>
                       {p}
                     </button>
                   ))}

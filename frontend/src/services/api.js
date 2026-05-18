@@ -60,4 +60,13 @@ export const supplierAPI = {
   getSaved: () => api.get('/suppliers/saved'),
 };
 
+export const quotationAPI = {
+  create: (data) => api.post('/quotations', data),
+  getSellerQuotations: () => api.get('/quotations/seller'),
+  getBuyerQuotations: () => api.get('/quotations/buyer'),
+  getById: (id) => api.get(`/quotations/${id}`),
+  sendWhatsApp: (id) => api.post(`/quotations/${id}/send-whatsapp`),
+  updateStatus: (id, status) => api.put(`/quotations/${id}/status`, { status }),
+};
+
 export default api;

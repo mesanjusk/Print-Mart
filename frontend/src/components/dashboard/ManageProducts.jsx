@@ -10,7 +10,7 @@ function ProductList() {
   const [loading, setLoading] = useState(true);
 
   const fetchProducts = () => {
-    productAPI.getMine().then((r) => setProducts(r.data)).finally(() => setLoading(false));
+    productAPI.getMine().then((r) => setProducts(Array.isArray(r.data) ? r.data : [])).finally(() => setLoading(false));
   };
 
   useEffect(fetchProducts, []);

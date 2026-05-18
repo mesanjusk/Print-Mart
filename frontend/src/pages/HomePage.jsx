@@ -28,9 +28,12 @@ export default function HomePage() {
   useEffect(() => {
     Promise.all([categoryAPI.getAll(), productAPI.getFeatured()])
       .then(([catRes, prodRes]) => {
-        setCategories(catRes.data.slice(0, 10));
-        setFeatured(prodRes.data);
+        const cats = Array.isArray(catRes.data) ? catRes.data : [];
+        const prods = Array.isArray(prodRes.data) ? prodRes.data : [];
+        setCategories(cats.slice(0, 10));
+        setFeatured(prods);
       })
+      .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
 

@@ -8,7 +8,7 @@ export default function SavedProducts() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    supplierAPI.getSaved().then((r) => setProducts(r.data)).finally(() => setLoading(false));
+    supplierAPI.getSaved().then((r) => setProducts(Array.isArray(r.data) ? r.data : [])).finally(() => setLoading(false));
   }, []);
 
   return (

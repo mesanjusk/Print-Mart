@@ -24,15 +24,15 @@ export default function ProductsPage() {
     setLoading(true);
     try {
       const { data } = await productAPI.getAll({ keyword, category, sort, page, minPrice, maxPrice });
-      setProducts(data.products);
-      setPagination({ page: data.page, pages: data.pages, total: data.total });
+      setProducts(Array.isArray(data.products) ? data.products : []);
+      setPagination({ page: data.page || 1, pages: data.pages || 1, total: data.total || 0 });
     } finally {
       setLoading(false);
     }
   }, [keyword, category, sort, page, minPrice, maxPrice]);
 
   useEffect(() => {
-    categoryAPI.getAll().then((r) => setCategories(r.data));
+    categoryAPI.getAll().then((r) => setCategories(Array.isArray(r.data) ? r.data : []));
   }, []);
 
   useEffect(() => {

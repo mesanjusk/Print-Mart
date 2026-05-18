@@ -18,7 +18,7 @@ export default function Inquiries() {
       const { data } = tab === 'buyer'
         ? await inquiryAPI.getBuyerInquiries()
         : await inquiryAPI.getSellerInquiries();
-      setInquiries(data);
+      setInquiries(Array.isArray(data) ? data : []);
     } finally {
       setLoading(false);
     }

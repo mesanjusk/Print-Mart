@@ -18,9 +18,10 @@ export default function SuppliersPage() {
     setLoading(true);
     supplierAPI.getAll({ keyword: search, page })
       .then((r) => {
-        setSuppliers(r.data.suppliers);
-        setPagination({ page: r.data.page, pages: r.data.pages, total: r.data.total });
+        setSuppliers(Array.isArray(r.data.suppliers) ? r.data.suppliers : []);
+        setPagination({ page: r.data.page || 1, pages: r.data.pages || 1, total: r.data.total || 0 });
       })
+      .catch(() => setSuppliers([]))
       .finally(() => setLoading(false));
   }, [search, page]);
 

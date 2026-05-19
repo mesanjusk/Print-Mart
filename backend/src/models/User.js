@@ -23,6 +23,8 @@ const userSchema = new mongoose.Schema({
   // Seller plan: only 'premium' sellers receive lead broadcasts
   plan: { type: String, enum: ['free', 'premium'], default: 'free' },
   planActivatedAt: { type: Date },
+  lastSeenAt: { type: Date },
+  morningDigestOptIn: { type: Boolean, default: false },
   // PWA push notification subscription
   pushSubscription: {
     endpoint: { type: String },

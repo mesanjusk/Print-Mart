@@ -239,6 +239,38 @@ const closeInquiry = asyncHandler(async (req, res) => {
   res.json(inquiry);
 });
 
+/**
+ * GET /api/inquiries/:id/wa/:interestIndex
+ * Privacy-safe redirect: buyer is redirected to seller's WhatsApp
+ * without the seller's number being exposed in the frontend HTML.
+ */
+const waRedirect = asyncHandler(async (req, res) => {
+  const inquiry = await Inquiry.findById(req.params.id);
+  if (!inquiry) { res.status(404); throw new Error('Inquiry not found'); }
+
+  // Only the buyer of this inquiry can use this endpoint
+  if (inquiry.buyer.toString() !== req.user._id.toString()) {
+    res.status(403); throw new Error('Not authorized');
+  }
+
+  const idx = parseInt(req.params.interestIndex, 10);
+  const interest = inquiry.sellerInterests[idx];
+  if (!interest?.sellerPhone) {
+    res.status(404); throw new Error('Seller phone not available');
+  }
+
+  // Fetch product name for the pre-filled message
+  await inquiry.populate('product', 'name');
+
+  const cleaned = interest.sellerPhone.replace(/[^0-9]/g, '');
+  const num = cleaned.startsWith('91') ? cleaned : `91${cleaned}`;
+  const text = encodeURIComponent(
+    `Hi ${interest.sellerBusiness || interest.sellerName}, I found you on PrintMart. I need ${inquiry.quantity} ${inquiry.unit} of ${inquiry.product?.name}. Can you share your best price?`
+  );
+
+  res.redirect(`https://wa.me/${num}?text=${text}`);
+});
+
 module.exports = {
   createInquiry,
   getBuyerInquiries,
@@ -246,4 +278,5 @@ module.exports = {
   acceptInquiry,
   replyInquiry,
   closeInquiry,
+  waRedirect,
 };

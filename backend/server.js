@@ -42,6 +42,7 @@ app.use('/api/suppliers', require('./src/routes/supplierRoutes'));
 app.use('/api/quotations', require('./src/routes/quotationRoutes'));
 app.use('/api/whatsapp', require('./src/routes/whatsappRoutes'));
 app.use('/api/designs', require('./src/routes/designRoutes'));
+app.use('/api/offers', require('./src/routes/offerRoutes'));
 app.use('/api/push', require('./src/routes/pushRoutes'));
 
 app.get('/', (req, res) => {

@@ -6,6 +6,8 @@ const protect = asyncHandler(async (req, res, next) => {
   let token;
   if (req.headers.authorization?.startsWith('Bearer')) {
     token = req.headers.authorization.split(' ')[1];
+  } else if (req.query.token) {
+    token = req.query.token;
   }
   if (!token) {
     res.status(401);
@@ -13,6 +15,8 @@ const protect = asyncHandler(async (req, res, next) => {
   }
   const decoded = jwt.verify(token, process.env.JWT_SECRET);
   req.user = await User.findById(decoded.id).select('-password');
+  // Update lastSeenAt without blocking the request
+  User.findByIdAndUpdate(decoded.id, { lastSeenAt: new Date() }).catch(() => {});
   if (!req.user) {
     res.status(401);
     throw new Error('User not found');

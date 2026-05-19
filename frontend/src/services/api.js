@@ -93,4 +93,12 @@ export const designAPI = {
   remove: (id) => api.delete(`/designs/${id}`),
 };
 
+export const offerAPI = {
+  getAll: (params) => api.get('/offers', { params }),
+  getMy: () => api.get('/offers/my'),
+  create: (data) => api.post('/offers', data),
+  update: (id, data) => api.put(`/offers/${id}`, data),
+  remove: (id) => api.delete(`/offers/${id}`),
+};
+
 export default api;

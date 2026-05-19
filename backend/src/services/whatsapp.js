@@ -175,6 +175,21 @@ const broadcastInquiryToSellers = async (sellers, specs, buyerName) => {
 };
 
 /**
+ * Send a morning lead digest to a seller via WhatsApp.
+ */
+const sendMorningDigest = async (sellerPhone, sellerName, pendingCount, offerCount) => {
+  if (!sellerPhone) return null;
+  const body =
+    `*Good Morning, ${sellerName}! 🌅 — PrintMart*\n\n` +
+    `Here's your daily update:\n\n` +
+    `📬 *Pending Leads:* ${pendingCount}\n` +
+    `🔥 *Active Offers:* ${offerCount}\n\n` +
+    `Log in to respond and grow your business!\n` +
+    `👉 https://app.instify.in/dashboard/inquiries`;
+  return sendTextMessage(sellerPhone, body);
+};
+
+/**
  * Verify the WhatsApp webhook challenge.
  * Returns the challenge string on success, or null on failure.
  */
@@ -196,5 +211,6 @@ module.exports = {
   sendQuotationToClient,
   sendBuyerReplyNotificationToSeller,
   broadcastInquiryToSellers,
+  sendMorningDigest,
   verifyWebhook,
 };

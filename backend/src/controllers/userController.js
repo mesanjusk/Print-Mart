@@ -38,4 +38,31 @@ const getSellerPlanInfo = asyncHandler(async (req, res) => {
   res.json({ plan: user.plan, planActivatedAt: user.planActivatedAt, role: user.role });
 });
 
-module.exports = { getAllUsers, toggleUserStatus, togglePremium, getSellerPlanInfo };
+const notifyInactiveSellers = asyncHandler(async (req, res) => {
+  const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000); // 7 days ago
+  const inactiveSellers = await User.find({
+    role: 'seller',
+    pushEnabled: true,
+    $or: [
+      { lastSeenAt: { $lt: cutoff } },
+      { lastSeenAt: null },
+    ],
+  }).select('pushSubscription pushEnabled name');
+
+  const { sendPushToMany } = require('../services/pushNotification');
+  const Inquiry = require('../models/Inquiry');
+
+  // Count total new inquiries in last 7 days across all sellers
+  const recentCount = await Inquiry.countDocuments({ createdAt: { $gt: cutoff } });
+
+  await sendPushToMany(inactiveSellers, {
+    title: '👋 We miss you on PrintMart!',
+    body: `${recentCount} new print orders came in. Check your leads!`,
+    url: '/dashboard/inquiries',
+    tag: 're-engage',
+  }, (expiredId) => User.findByIdAndUpdate(expiredId, { pushEnabled: false }).catch(() => {}));
+
+  res.json({ message: `Notified ${inactiveSellers.length} inactive sellers` });
+});
+
+module.exports = { getAllUsers, toggleUserStatus, togglePremium, getSellerPlanInfo, notifyInactiveSellers };

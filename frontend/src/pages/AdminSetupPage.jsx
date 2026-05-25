@@ -1,24 +1,25 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import toast from 'react-hot-toast';
 
 export default function AdminSetupPage() {
   const navigate = useNavigate();
-  const [form, setForm] = useState({
-    secret: '',
-    name: 'Super Admin',
-    email: '',
-    password: '',
-    phone: '',
-  });
+  const [status, setStatus] = useState(null); // { adminExists, secretConfigured }
+  const [form, setForm] = useState({ secret: '', name: 'Super Admin', email: '', password: '', phone: '' });
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
 
+  useEffect(() => {
+    api.get('/seed-admin/status')
+      .then((r) => setStatus(r.data))
+      .catch(() => setStatus({ adminExists: false, secretConfigured: false }));
+  }, []);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.secret || !form.email || !form.password) {
-      toast.error('Secret, email and password are required');
+    if (!form.email || !form.password) {
+      toast.error('Email and password are required');
       return;
     }
     setLoading(true);
@@ -27,11 +28,21 @@ export default function AdminSetupPage() {
       toast.success(res.data.message || 'Admin created!');
       setDone(true);
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed — check your seed secret');
+      toast.error(err.response?.data?.message || 'Something went wrong');
     } finally {
       setLoading(false);
     }
   };
+
+  if (!status) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-green-500" />
+      </div>
+    );
+  }
+
+  const needsSecret = status.adminExists;
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
@@ -54,36 +65,39 @@ export default function AdminSetupPage() {
             <h2 className="text-xl font-bold text-gray-800 mb-2">Admin Account Created!</h2>
             <p className="text-gray-500 text-sm mb-6">
               You can now log in with your admin email and password.
-              <br />
-              <strong className="text-red-600">Important:</strong> Remove <code className="bg-gray-100 px-1 rounded text-xs">ADMIN_SEED_SECRET</code> from your server environment variables now.
             </p>
-            <button
-              onClick={() => navigate('/login')}
-              className="btn-primary w-full"
-            >
+            <button onClick={() => navigate('/login')} className="btn-primary w-full">
               Go to Login →
             </button>
           </div>
         ) : (
           <div className="card p-8">
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-6 text-sm text-yellow-800">
-              <strong>Before you start:</strong> Add <code className="bg-white px-1 rounded text-xs">ADMIN_SEED_SECRET=your-secret</code> to your Render backend environment variables, then enter the same secret below.
-            </div>
+            {!needsSecret ? (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-6 text-sm text-green-800">
+                <strong>First-run mode:</strong> No admin account exists yet. Fill the form below to create one — no secret required.
+              </div>
+            ) : (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-6 text-sm text-yellow-800">
+                <strong>Admin already exists.</strong> To add another admin, provide the <code className="bg-white px-1 rounded text-xs">ADMIN_SEED_SECRET</code> from your Render environment variables.
+              </div>
+            )}
 
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Seed Secret <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="password"
-                  value={form.secret}
-                  onChange={(e) => setForm({ ...form, secret: e.target.value })}
-                  className="input w-full"
-                  placeholder="The secret you set in Render env vars"
-                  required
-                />
-              </div>
+              {needsSecret && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Seed Secret <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="password"
+                    value={form.secret}
+                    onChange={(e) => setForm({ ...form, secret: e.target.value })}
+                    className="input w-full"
+                    placeholder="ADMIN_SEED_SECRET value from Render"
+                    required
+                  />
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>

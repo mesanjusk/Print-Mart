@@ -51,21 +51,46 @@ app.get('/', (req, res) => {
   res.json({ message: 'PrintMart API is running', status: 'ok' });
 });
 
-// One-time admin bootstrap – requires ADMIN_SEED_SECRET env var to be set
+// One-time admin bootstrap
+// If no admin exists yet → allowed without secret (first-run mode)
+// If admin already exists → requires ADMIN_SEED_SECRET env var
+app.get('/api/seed-admin/status', async (req, res) => {
+  try {
+    const User = require('./src/models/User');
+    const adminExists = await User.exists({ role: 'admin' });
+    res.json({
+      adminExists: !!adminExists,
+      secretConfigured: !!process.env.ADMIN_SEED_SECRET,
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 app.post('/api/seed-admin', async (req, res) => {
   const { secret, name, email, password, phone } = req.body;
-  const SEED_SECRET = process.env.ADMIN_SEED_SECRET;
-  if (!SEED_SECRET || secret !== SEED_SECRET) {
-    return res.status(403).json({ message: 'Invalid seed secret' });
-  }
   try {
     const User = require('./src/models/User');
     const generateToken = require('./src/utils/generateToken');
+    const adminExists = await User.exists({ role: 'admin' });
+
+    if (adminExists) {
+      // Admins already exist — require secret
+      const SEED_SECRET = process.env.ADMIN_SEED_SECRET;
+      if (!SEED_SECRET || secret !== SEED_SECRET) {
+        return res.status(403).json({ message: 'An admin account already exists. Provide the correct ADMIN_SEED_SECRET to create another.' });
+      }
+    }
+    // First-run: no admin exists → allow without secret
+
     let user = await User.findOne({ email });
     if (user) {
       user.role = 'admin';
       await user.save();
       return res.json({ message: 'Existing user promoted to admin', email: user.email, role: user.role });
+    }
+    if (!password || password.length < 6) {
+      return res.status(400).json({ message: 'Password must be at least 6 characters' });
     }
     user = await User.create({ name: name || 'Super Admin', email, password, phone, role: 'admin' });
     res.status(201).json({

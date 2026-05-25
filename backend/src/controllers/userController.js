@@ -27,7 +27,6 @@ const createAdmin = asyncHandler(async (req, res) => {
   }
   const exists = await User.findOne({ email });
   if (exists) {
-    // Promote existing user to admin
     exists.role = 'admin';
     await exists.save();
     return res.json({ message: `${exists.name} promoted to admin`, user: { _id: exists._id, email: exists.email, role: exists.role } });
@@ -42,7 +41,7 @@ const createAdmin = asyncHandler(async (req, res) => {
   });
 });
 
-// PUT /api/users/:id/role  (admin only – change any user's role)
+// PUT /api/users/:id/role  (admin only)
 const updateUserRole = asyncHandler(async (req, res) => {
   const { role } = req.body;
   if (!['buyer', 'seller', 'admin'].includes(role)) {
@@ -54,4 +53,41 @@ const updateUserRole = asyncHandler(async (req, res) => {
   res.json(user);
 });
 
-module.exports = { getAllUsers, toggleUserStatus, createAdmin, updateUserRole };
+const togglePremium = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.params.id);
+  if (!user) { res.status(404); throw new Error('User not found'); }
+  if (user.role !== 'seller') { res.status(400); throw new Error('Premium plan is only for sellers'); }
+  user.plan = user.plan === 'premium' ? 'free' : 'premium';
+  if (user.plan === 'premium') user.planActivatedAt = new Date();
+  await user.save();
+  res.json({ message: `Seller plan set to ${user.plan}`, plan: user.plan });
+});
+
+const getSellerPlanInfo = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.user._id).select('plan planActivatedAt role');
+  res.json({ plan: user.plan, planActivatedAt: user.planActivatedAt, role: user.role });
+});
+
+const notifyInactiveSellers = asyncHandler(async (req, res) => {
+  const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const inactiveSellers = await User.find({
+    role: 'seller',
+    pushEnabled: true,
+    $or: [{ lastSeenAt: { $lt: cutoff } }, { lastSeenAt: null }],
+  }).select('pushSubscription pushEnabled name');
+
+  const { sendPushToMany } = require('../services/pushNotification');
+  const Inquiry = require('../models/Inquiry');
+  const recentCount = await Inquiry.countDocuments({ createdAt: { $gt: cutoff } });
+
+  await sendPushToMany(inactiveSellers, {
+    title: '👋 We miss you on PrintMart!',
+    body: `${recentCount} new print orders came in. Check your leads!`,
+    url: '/dashboard/inquiries',
+    tag: 're-engage',
+  }, (expiredId) => User.findByIdAndUpdate(expiredId, { pushEnabled: false }).catch(() => {}));
+
+  res.json({ message: `Notified ${inactiveSellers.length} inactive sellers` });
+});
+
+module.exports = { getAllUsers, toggleUserStatus, createAdmin, updateUserRole, togglePremium, getSellerPlanInfo, notifyInactiveSellers };

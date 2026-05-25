@@ -79,6 +79,9 @@ function ProductForm({ editId }) {
     tags: '', featured: false,
   });
   const [specRows, setSpecRows] = useState([{ key: '', value: '' }]);
+  const [printSpecs, setPrintSpecs] = useState({
+    paperWeight: '', size: '', finish: '', quantity: '', sides: '', deliveryDays: '', material: '',
+  });
 
   useEffect(() => {
     categoryAPI.getAll().then((r) => setCategories(r.data));
@@ -93,6 +96,17 @@ function ProductForm({ editId }) {
             tags: p.tags?.join(', ') || '', featured: p.featured || false,
           });
           if (p.specifications?.length) setSpecRows(p.specifications);
+          if (p.printSpecs) {
+            setPrintSpecs({
+              paperWeight: p.printSpecs.paperWeight || '',
+              size: p.printSpecs.size || '',
+              finish: p.printSpecs.finish || '',
+              quantity: p.printSpecs.quantity || '',
+              sides: p.printSpecs.sides || '',
+              deliveryDays: p.printSpecs.deliveryDays || '',
+              material: p.printSpecs.material || '',
+            });
+          }
         }
       });
     }
@@ -106,6 +120,16 @@ function ProductForm({ editId }) {
     fd.set('tags', JSON.stringify(form.tags.split(',').map((t) => t.trim()).filter(Boolean)));
     fd.set('specifications', JSON.stringify(specRows.filter((r) => r.key && r.value)));
     fd.delete('priceMin'); fd.delete('priceMax'); fd.delete('priceUnit');
+    // Build printSpecs — only include non-empty values
+    const ps = {};
+    if (printSpecs.paperWeight) ps.paperWeight = Number(printSpecs.paperWeight);
+    if (printSpecs.size) ps.size = printSpecs.size;
+    if (printSpecs.finish) ps.finish = printSpecs.finish;
+    if (printSpecs.quantity) ps.quantity = Number(printSpecs.quantity);
+    if (printSpecs.sides) ps.sides = printSpecs.sides;
+    if (printSpecs.deliveryDays) ps.deliveryDays = Number(printSpecs.deliveryDays);
+    if (printSpecs.material) ps.material = printSpecs.material;
+    if (Object.keys(ps).length > 0) fd.set('printSpecs', JSON.stringify(ps));
     try {
       if (editId) await productAPI.update(editId, fd);
       else await productAPI.create(fd);
@@ -182,6 +206,58 @@ function ProductForm({ editId }) {
             ))}
             <button type="button" onClick={() => setSpecRows([...specRows, { key: '', value: '' }])} className="text-sm text-green-600 hover:text-green-700">+ Add Spec</button>
           </div>
+          {/* Print Specs — for price comparison feature */}
+          <div className="border border-green-200 rounded-lg p-4 bg-green-50">
+            <h3 className="text-sm font-semibold text-gray-800 mb-3">Print Specifications <span className="text-gray-400 font-normal">(enables price comparison)</span></h3>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Quantity (pcs)</label>
+                <select value={printSpecs.quantity} onChange={(e) => setPrintSpecs({ ...printSpecs, quantity: e.target.value })} className="input text-sm">
+                  <option value="">Select</option>
+                  {[100, 250, 500, 1000, 2000, 5000, 10000].map((q) => <option key={q} value={q}>{q}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Paper Weight (gsm)</label>
+                <select value={printSpecs.paperWeight} onChange={(e) => setPrintSpecs({ ...printSpecs, paperWeight: e.target.value })} className="input text-sm">
+                  <option value="">Select</option>
+                  {[90, 100, 130, 170, 250, 300, 350].map((g) => <option key={g} value={g}>{g} gsm</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Finish</label>
+                <select value={printSpecs.finish} onChange={(e) => setPrintSpecs({ ...printSpecs, finish: e.target.value })} className="input text-sm capitalize">
+                  <option value="">Select</option>
+                  {['matte', 'glossy', 'uncoated', 'soft-touch', 'uv', 'other'].map((f) => <option key={f} value={f} className="capitalize">{f}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Sides</label>
+                <select value={printSpecs.sides} onChange={(e) => setPrintSpecs({ ...printSpecs, sides: e.target.value })} className="input text-sm">
+                  <option value="">Select</option>
+                  <option value="single">Single-sided</option>
+                  <option value="double">Double-sided</option>
+                  <option value="na">N/A</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Size / Dimensions</label>
+                <input value={printSpecs.size} onChange={(e) => setPrintSpecs({ ...printSpecs, size: e.target.value })} className="input text-sm" placeholder="e.g. 3.5x2 in, A4, 12x18ft" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Delivery Days</label>
+                <select value={printSpecs.deliveryDays} onChange={(e) => setPrintSpecs({ ...printSpecs, deliveryDays: e.target.value })} className="input text-sm">
+                  <option value="">Select</option>
+                  {[1, 2, 3, 5, 7, 10, 14].map((d) => <option key={d} value={d}>{d} day{d !== 1 ? 's' : ''}</option>)}
+                </select>
+              </div>
+              <div className="col-span-2">
+                <label className="block text-xs font-medium text-gray-600 mb-1">Material <span className="text-gray-400">(for banners, gifts)</span></label>
+                <input value={printSpecs.material} onChange={(e) => setPrintSpecs({ ...printSpecs, material: e.target.value })} className="input text-sm" placeholder="e.g. flex, vinyl, plastic, metal, wood" />
+              </div>
+            </div>
+          </div>
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Product Images</label>
             <input type="file" name="images" multiple accept="image/*" className="input py-1.5 text-sm" />

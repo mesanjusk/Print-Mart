@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
-import { FiStar, FiMapPin, FiPhone, FiMail, FiHeart, FiShare2, FiChevronLeft } from 'react-icons/fi';
-import { productAPI, inquiryAPI } from '../services/api';
+import { useParams, Link, useLocation } from 'react-router-dom';
+import { FiStar, FiMapPin, FiHeart, FiChevronLeft, FiGitBranch, FiImage, FiUpload } from 'react-icons/fi';
+import { productAPI, inquiryAPI, designAPI, compareAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import Spinner from '../components/common/Spinner';
 import toast from 'react-hot-toast';
 
 export default function ProductDetailPage() {
   const { slug } = useParams();
+  const location = useLocation();
   const { user } = useAuth();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -16,6 +17,9 @@ export default function ProductDetailPage() {
   const [submitting, setSubmitting] = useState(false);
   const [reviewForm, setReviewForm] = useState({ rating: 5, comment: '' });
   const [showReviewForm, setShowReviewForm] = useState(false);
+  const [myDesigns, setMyDesigns] = useState([]);
+  const [selectedDesign, setSelectedDesign] = useState(location.state?.reorderDesign || null);
+  const [showDesignPicker, setShowDesignPicker] = useState(false);
 
   useEffect(() => {
     productAPI.getBySlug(slug)
@@ -24,14 +28,26 @@ export default function ProductDetailPage() {
       .finally(() => setLoading(false));
   }, [slug]);
 
+  useEffect(() => {
+    if (user) {
+      designAPI.getAll().then((r) => setMyDesigns(Array.isArray(r.data) ? r.data : [])).catch(() => {});
+    }
+  }, [user]);
+
   const handleInquiry = async (e) => {
     e.preventDefault();
     if (!user) return toast.error('Please login to send inquiry');
     setSubmitting(true);
     try {
-      await inquiryAPI.create({ productId: data.product._id, ...inquiryForm });
-      toast.success('Inquiry sent successfully!');
+      await inquiryAPI.create({
+        productId: data.product._id,
+        ...inquiryForm,
+        designId: selectedDesign?._id,
+        designFileUrl: selectedDesign?.fileUrl,
+      });
+      toast.success('Inquiry sent! Sellers will be notified via WhatsApp.');
       setInquiryForm({ message: '', quantity: 1, unit: 'pieces' });
+      setSelectedDesign(null);
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to send inquiry');
     } finally {
@@ -128,6 +144,42 @@ export default function ProductDetailPage() {
             </div>
           )}
 
+          {/* Print specs chips */}
+          {product.printSpecs && Object.values(product.printSpecs).some(Boolean) && (
+            <div className="mb-4">
+              <h3 className="font-semibold text-gray-800 mb-2">Print Specifications</h3>
+              <div className="flex flex-wrap gap-2">
+                {product.printSpecs.paperWeight && (
+                  <span className="text-xs bg-green-50 text-green-700 border border-green-200 px-2.5 py-1 rounded-full">{product.printSpecs.paperWeight} gsm paper</span>
+                )}
+                {product.printSpecs.finish && (
+                  <span className="text-xs bg-green-50 text-green-700 border border-green-200 px-2.5 py-1 rounded-full capitalize">{product.printSpecs.finish} finish</span>
+                )}
+                {product.printSpecs.size && (
+                  <span className="text-xs bg-green-50 text-green-700 border border-green-200 px-2.5 py-1 rounded-full">{product.printSpecs.size}</span>
+                )}
+                {product.printSpecs.sides && (
+                  <span className="text-xs bg-green-50 text-green-700 border border-green-200 px-2.5 py-1 rounded-full capitalize">{product.printSpecs.sides}-sided</span>
+                )}
+                {product.printSpecs.quantity && (
+                  <span className="text-xs bg-green-50 text-green-700 border border-green-200 px-2.5 py-1 rounded-full">{product.printSpecs.quantity} pcs</span>
+                )}
+                {product.printSpecs.deliveryDays && (
+                  <span className="text-xs bg-blue-50 text-blue-700 border border-blue-200 px-2.5 py-1 rounded-full">{product.printSpecs.deliveryDays}-day delivery</span>
+                )}
+                {product.printSpecs.material && (
+                  <span className="text-xs bg-green-50 text-green-700 border border-green-200 px-2.5 py-1 rounded-full capitalize">{product.printSpecs.material}</span>
+                )}
+              </div>
+              <Link
+                to={`/compare?category=${product.category?._id || product.category}&quantity=${product.printSpecs.quantity || ''}&finish=${product.printSpecs.finish || ''}`}
+                className="inline-flex items-center gap-1 text-xs text-green-600 hover:underline mt-2"
+              >
+                <FiGitBranch size={12} /> Compare prices from other sellers
+              </Link>
+            </div>
+          )}
+
           {product.tags?.length > 0 && (
             <div className="flex flex-wrap gap-2">
               {product.tags.map((tag) => (
@@ -171,6 +223,56 @@ export default function ProductDetailPage() {
                   ))}
                 </select>
               </div>
+              {/* Design attachment */}
+              {user && (
+                <div className="border rounded-lg p-3 bg-gray-50">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-gray-700 flex items-center gap-1">
+                      <FiImage size={14} /> Attach Design File
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowDesignPicker(!showDesignPicker)}
+                      className="text-xs text-green-600 hover:underline"
+                    >
+                      {showDesignPicker ? 'Hide' : myDesigns.length > 0 ? `My Library (${myDesigns.length})` : 'Upload'}
+                    </button>
+                  </div>
+
+                  {selectedDesign && (
+                    <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded px-3 py-2 mb-2">
+                      <FiImage size={14} className="text-green-600 flex-shrink-0" />
+                      <span className="text-sm text-green-800 truncate flex-grow">{selectedDesign.name}</span>
+                      <button type="button" onClick={() => setSelectedDesign(null)} className="text-gray-400 hover:text-red-500 text-xs">✕</button>
+                    </div>
+                  )}
+
+                  {showDesignPicker && (
+                    <div>
+                      {myDesigns.length === 0 ? (
+                        <p className="text-xs text-gray-500 text-center py-2">
+                          No designs saved. <Link to="/dashboard/designs" className="text-green-600 hover:underline">Upload from Design Library</Link>
+                        </p>
+                      ) : (
+                        <div className="grid grid-cols-3 gap-2 max-h-40 overflow-y-auto">
+                          {myDesigns.map((d) => (
+                            <button
+                              key={d._id}
+                              type="button"
+                              onClick={() => { setSelectedDesign(d); setShowDesignPicker(false); }}
+                              className={`border rounded p-1.5 text-left hover:border-green-400 transition-colors ${selectedDesign?._id === d._id ? 'border-green-500 bg-green-50' : 'border-gray-200'}`}
+                            >
+                              <p className="text-xs font-medium text-gray-700 truncate">{d.name}</p>
+                              {d.category && <p className="text-xs text-gray-400 capitalize">{d.category.replace(/-/g, ' ')}</p>}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
               <button type="submit" disabled={submitting} className="btn-primary w-full">
                 {submitting ? 'Sending...' : 'Send Inquiry'}
               </button>

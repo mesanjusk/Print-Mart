@@ -49,8 +49,14 @@ export const inquiryAPI = {
   create: (data) => api.post('/inquiries', data),
   getBuyerInquiries: () => api.get('/inquiries/buyer'),
   getSellerInquiries: () => api.get('/inquiries/seller'),
+  accept: (id) => api.put(`/inquiries/${id}/accept`),
   reply: (id, data) => api.post(`/inquiries/${id}/reply`, data),
   close: (id) => api.put(`/inquiries/${id}/close`),
+};
+
+export const pushAPI = {
+  subscribe: (subscription) => api.post('/push/subscribe', subscription),
+  unsubscribe: () => api.post('/push/unsubscribe'),
 };
 
 export const supplierAPI = {
@@ -90,6 +96,32 @@ export const waAdminAPI = {
   getSessions: (params) => api.get('/admin/whatsapp/sessions', { params }),
   sendBroadcast: (data) => api.post('/admin/whatsapp/broadcast', data),
   sendDirect: (data) => api.post('/admin/whatsapp/send', data),
+};
+
+export const compareAPI = {
+  compare: (params) => api.get('/products/compare', { params }),
+  updatePrintSpecs: (id, specs) => api.put(`/products/${id}/print-specs`, specs),
+};
+
+export const userAPI = {
+  getAll: () => api.get('/users'),
+  toggleStatus: (id) => api.put(`/users/${id}/status`),
+  togglePremium: (id) => api.put(`/users/${id}/premium`),
+  getMyPlan: () => api.get('/users/me/plan'),
+};
+
+export const designAPI = {
+  upload: (formData) => api.post('/designs', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  getAll: () => api.get('/designs'),
+  remove: (id) => api.delete(`/designs/${id}`),
+};
+
+export const offerAPI = {
+  getAll: (params) => api.get('/offers', { params }),
+  getMy: () => api.get('/offers/my'),
+  create: (data) => api.post('/offers', data),
+  update: (id, data) => api.put(`/offers/${id}`, data),
+  remove: (id) => api.delete(`/offers/${id}`),
 };
 
 export default api;

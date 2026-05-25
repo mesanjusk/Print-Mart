@@ -303,6 +303,50 @@ const sendBroadcast = async (phones, message) => {
   return results;
 };
 
+
+const sendBuyerReplyNotificationToSeller = async (sellerPhone, buyerName, productName, replyText) => {
+  if (!sellerPhone) return null;
+  const body =
+    `*Buyer Replied – PrintMart*\n\n` +
+    `*${buyerName}* has replied to the inquiry for *${productName}*.\n\n` +
+    `*Message:* ${replyText}\n\n` +
+    `Log in to PrintMart to respond.`;
+  return sendTextMessage(sellerPhone, body);
+};
+
+const broadcastInquiryToSellers = async (sellers, specs, buyerName) => {
+  if (!sellers || sellers.length === 0) return;
+  const specLines = [
+    specs.quantity ? `*Quantity:* ${specs.quantity} ${specs.unit || 'pcs'}` : null,
+    specs.finish ? `*Finish:* ${specs.finish}` : null,
+    specs.size ? `*Size:* ${specs.size}` : null,
+    specs.paperWeight ? `*Paper:* ${specs.paperWeight} gsm` : null,
+    specs.deliveryDays ? `*Delivery needed in:* ${specs.deliveryDays} days` : null,
+  ].filter(Boolean).join('\n');
+  const body =
+    `*New Inquiry Broadcast – PrintMart*\n\n` +
+    `A buyer (*${buyerName}*) is looking for:\n` +
+    `*Product:* ${specs.productName || specs.category}\n` +
+    `${specLines}\n\n` +
+    `If you can fulfill this order, log in to PrintMart and send a quotation.`;
+  const results = await Promise.allSettled(
+    sellers.map((s) => s.phone ? sendTextMessage(s.phone, body) : Promise.resolve(null))
+  );
+  const sent = results.filter((r) => r.status === 'fulfilled' && r.value).length;
+  console.log(`[WhatsApp] Broadcast sent to ${sent}/${sellers.length} sellers.`);
+};
+
+const sendMorningDigest = async (sellerPhone, sellerName, pendingCount, offerCount) => {
+  if (!sellerPhone) return null;
+  const body =
+    `*Good Morning, ${sellerName}! 🌅 — PrintMart*\n\n` +
+    `Here's your daily update:\n\n` +
+    `📬 *Pending Leads:* ${pendingCount}\n` +
+    `🔥 *Active Offers:* ${offerCount}\n\n` +
+    `Log in to respond and grow your business!\n` +
+    `👉 https://app.instify.in/dashboard/inquiries`;
+  return sendTextMessage(sellerPhone, body);
+};
 const verifyWebhook = (mode, token, challenge) => {
   if (!VERIFY_TOKEN) {
     console.warn('[WhatsApp] WHATSAPP_VERIFY_TOKEN not set.');
@@ -332,6 +376,9 @@ module.exports = {
   sendQuotationResponse,
   sendCancellationNotice,
   sendBroadcast,
+  sendBuyerReplyNotificationToSeller,
+  broadcastInquiryToSellers,
+  sendMorningDigest,
   verifyWebhook,
   logMessage,
 };

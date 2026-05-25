@@ -20,6 +20,20 @@ const userSchema = new mongoose.Schema({
   businessName: { type: String },
   gstin: { type: String },
   savedProducts: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Product' }],
+  // Seller plan: only 'premium' sellers receive lead broadcasts
+  plan: { type: String, enum: ['free', 'premium'], default: 'free' },
+  planActivatedAt: { type: Date },
+  lastSeenAt: { type: Date },
+  morningDigestOptIn: { type: Boolean, default: false },
+  // PWA push notification subscription
+  pushSubscription: {
+    endpoint: { type: String },
+    keys: {
+      p256dh: { type: String },
+      auth: { type: String },
+    },
+  },
+  pushEnabled: { type: Boolean, default: false },
 }, { timestamps: true });
 
 userSchema.pre('save', async function (next) {

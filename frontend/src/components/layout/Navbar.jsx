@@ -51,6 +51,8 @@ export default function Navbar() {
 
           <nav className="hidden md:flex items-center gap-4 text-sm">
             <Link to="/products" className="text-gray-600 hover:text-green-600 font-medium">Products</Link>
+            <Link to="/offers" className="text-orange-600 hover:text-orange-700 font-medium">🔥 Offers</Link>
+            <Link to="/compare" className="text-gray-600 hover:text-green-600 font-medium">Compare</Link>
             <Link to="/suppliers" className="text-gray-600 hover:text-green-600 font-medium">Suppliers</Link>
             {user ? (
               <div className="relative">
@@ -59,7 +61,7 @@ export default function Navbar() {
                   className="flex items-center gap-1 text-gray-700 hover:text-green-600"
                 >
                   <FiUser size={18} />
-                  <span className="font-medium">{user.name.split(' ')[0]}</span>
+                  <span className="font-medium">{(user.name || '').split(' ')[0] || 'User'}</span>
                 </button>
                 {userMenuOpen && (
                   <div className="absolute right-0 mt-2 w-48 bg-white border rounded-lg shadow-lg z-10">
@@ -98,6 +100,8 @@ export default function Navbar() {
       {menuOpen && (
         <div className="md:hidden bg-white border-t px-4 py-3 space-y-2">
           <Link to="/products" onClick={() => setMenuOpen(false)} className="block py-2 text-gray-700 hover:text-green-600">Products</Link>
+          <Link to="/offers" onClick={() => setMenuOpen(false)} className="block py-2 text-orange-600 hover:text-orange-700 font-medium">🔥 Offer Zone</Link>
+          <Link to="/compare" onClick={() => setMenuOpen(false)} className="block py-2 text-gray-700 hover:text-green-600">Compare Prices</Link>
           <Link to="/suppliers" onClick={() => setMenuOpen(false)} className="block py-2 text-gray-700 hover:text-green-600">Suppliers</Link>
           {user ? (
             <>

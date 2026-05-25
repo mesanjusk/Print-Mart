@@ -35,6 +35,34 @@ app.get('/', (req, res) => {
   res.json({ message: 'India Mart Clone API is running', status: 'ok' });
 });
 
+// One-time admin bootstrap – requires ADMIN_SEED_SECRET env var to be set
+app.post('/api/seed-admin', async (req, res) => {
+  const { secret, name, email, password, phone } = req.body;
+  const SEED_SECRET = process.env.ADMIN_SEED_SECRET;
+  if (!SEED_SECRET || secret !== SEED_SECRET) {
+    return res.status(403).json({ message: 'Invalid seed secret' });
+  }
+  try {
+    const User = require('./src/models/User');
+    const generateToken = require('./src/utils/generateToken');
+    let user = await User.findOne({ email });
+    if (user) {
+      user.role = 'admin';
+      await user.save();
+      return res.json({ message: 'Existing user promoted to admin', email: user.email, role: user.role });
+    }
+    user = await User.create({ name: name || 'Super Admin', email, password, phone, role: 'admin' });
+    res.status(201).json({
+      message: 'Admin created successfully',
+      email: user.email,
+      role: user.role,
+      token: generateToken(user._id),
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 app.use((err, req, res, next) => {
   const statusCode = res.statusCode === 200 ? 500 : res.statusCode;
   res.status(statusCode).json({

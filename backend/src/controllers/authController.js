@@ -9,7 +9,10 @@ const register = asyncHandler(async (req, res) => {
     res.status(400);
     throw new Error('User already exists');
   }
-  const user = await User.create({ name, email, password, role, phone, businessName });
+  // Public registration can only create buyer or seller accounts
+  const allowedRoles = ['buyer', 'seller'];
+  const safeRole = allowedRoles.includes(role) ? role : 'buyer';
+  const user = await User.create({ name, email, password, role: safeRole, phone, businessName });
   res.status(201).json({
     _id: user._id,
     name: user.name,

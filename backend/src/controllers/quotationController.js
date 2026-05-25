@@ -102,7 +102,8 @@ const getQuotationById = asyncHandler(async (req, res) => {
  */
 const sendQuotationWhatsApp = asyncHandler(async (req, res) => {
   const quotation = await Quotation.findById(req.params.id)
-    .populate('buyer', 'name phone');
+    .populate('buyer', 'name phone')
+    .populate('seller', 'name businessName');
 
   if (!quotation) {
     res.status(404);
@@ -115,7 +116,8 @@ const sendQuotationWhatsApp = asyncHandler(async (req, res) => {
     throw new Error('Buyer does not have a phone number on record');
   }
 
-  await sendQuotationToClient(buyerPhone, quotation);
+  const sellerName = quotation.seller?.businessName || quotation.seller?.name || 'Vendor';
+  await sendQuotationToClient(buyerPhone, quotation, sellerName, quotation.buyer._id);
 
   quotation.whatsappSent = true;
   if (quotation.status === 'draft') {

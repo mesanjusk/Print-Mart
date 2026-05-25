@@ -5,7 +5,7 @@ const { webhookVerify, webhookReceive } = require('../controllers/whatsappContro
 // GET /api/whatsapp/webhook – Meta webhook verification (public)
 router.get('/webhook', webhookVerify);
 
-// POST /api/whatsapp/webhook – incoming messages from Meta (public)
+// POST /api/whatsapp/webhook – incoming messages from Meta (public, raw body needed)
 router.post('/webhook', webhookReceive);
 
 module.exports = router;

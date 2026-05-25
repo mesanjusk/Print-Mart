@@ -1,90 +1,492 @@
 const Inquiry = require('../models/Inquiry');
 const User = require('../models/User');
-const { verifyWebhook } = require('../services/whatsapp');
+const Quotation = require('../models/Quotation');
+const Order = require('../models/Order');
+const WhatsAppSession = require('../models/WhatsAppSession');
+const WhatsAppLog = require('../models/WhatsAppLog');
+const wa = require('../services/whatsapp');
 
-/**
- * GET /api/whatsapp/webhook
- * Meta webhook verification handshake.
- */
+// ─── Webhook verification ────────────────────────────────────────────────────
+
 const webhookVerify = (req, res) => {
   const mode = req.query['hub.mode'];
   const token = req.query['hub.verify_token'];
   const challenge = req.query['hub.challenge'];
-
-  const result = verifyWebhook(mode, token, challenge);
-
+  const result = wa.verifyWebhook(mode, token, challenge);
   if (result !== null) {
-    console.log('[WhatsApp] Webhook verified successfully.');
+    console.log('[WA-Bot] Webhook verified.');
     return res.status(200).send(result);
   }
-
-  console.warn('[WhatsApp] Webhook verification failed – token mismatch or wrong mode.');
   return res.status(403).json({ message: 'Verification failed' });
 };
 
-/**
- * POST /api/whatsapp/webhook
- * Receive incoming messages / status updates from Meta.
- * Always responds 200 OK to acknowledge receipt.
- */
+// ─── Session helpers ─────────────────────────────────────────────────────────
+
+const getOrCreateSession = async (phone, user) => {
+  let session = await WhatsAppSession.findOne({ phone });
+  if (!session) {
+    session = await WhatsAppSession.create({
+      phone,
+      userId: user?._id || null,
+      role: user?.role || 'unknown',
+      state: 'idle',
+      context: {},
+    });
+  } else if (user && !session.userId) {
+    session.userId = user._id;
+    session.role = user.role;
+  }
+  session.lastActivity = new Date();
+  return session;
+};
+
+// ─── Command parser ──────────────────────────────────────────────────────────
+
+const parseCommand = (text) => {
+  const t = text.trim().toUpperCase();
+  if (/^(HI|HELLO|START|MENU|HEY)/.test(t)) return { cmd: 'MENU' };
+  if (/^HELP/.test(t)) return { cmd: 'HELP' };
+  if (/^STATUS/.test(t)) return { cmd: 'STATUS' };
+  if (/^ORDERS/.test(t)) return { cmd: 'ORDERS' };
+  if (/^QUOTES?/.test(t) && (t === 'QUOTES' || t === 'QUOTE')) return { cmd: 'LIST_QUOTES' };
+  if (/^ACCEPT/.test(t)) return { cmd: 'ACCEPT', args: t.replace('ACCEPT', '').trim() };
+  if (/^REJECT/.test(t)) return { cmd: 'REJECT', args: t.replace('REJECT', '').trim() };
+  if (/^PAID\s+/.test(t)) return { cmd: 'PAID', args: t.replace('PAID', '').trim() };
+  if (/^TRACK\s+/.test(t)) return { cmd: 'TRACK', args: t.replace('TRACK', '').trim() };
+  if (/^CANCEL\s+/.test(t)) return { cmd: 'CANCEL', args: t.replace('CANCEL', '').trim() };
+  // Seller commands
+  if (/^QUOTE\s+/.test(t)) {
+    const parts = t.replace('QUOTE', '').trim().split(/\s+/);
+    if (parts.length >= 2 && isNaN(parts[0])) {
+      return { cmd: 'SEND_QUOTE', inquiryRef: parts[0], amount: parseFloat(parts[1]) };
+    }
+    return { cmd: 'SEND_QUOTE', inquiryRef: null, amount: parseFloat(parts[0]) };
+  }
+  if (/^DISPATCH\s+/.test(t)) {
+    const parts = t.replace('DISPATCH', '').trim().split(/\s+/);
+    return { cmd: 'DISPATCH', orderNum: parts[0], tracking: parts.slice(1).join(' ') || '' };
+  }
+  if (/^DELIVER\s+/.test(t)) {
+    return { cmd: 'DELIVER', orderNum: t.replace('DELIVER', '').trim() };
+  }
+  return { cmd: 'REPLY', text: text.trim() };
+};
+
+// ─── Buyer flows ─────────────────────────────────────────────────────────────
+
+const handleBuyerMessage = async (phone, user, text, interactiveId) => {
+  const cmd = interactiveId ? { cmd: interactiveId.toUpperCase() } : parseCommand(text);
+
+  if (cmd.cmd === 'MENU') {
+    return wa.sendWelcomeBuyer(phone, user.name, user._id);
+  }
+
+  if (cmd.cmd === 'HELP') {
+    return wa.sendHelpBuyer(phone, user._id);
+  }
+
+  if (cmd.cmd === 'STATUS') {
+    const inquiries = await Inquiry.find({ buyer: user._id, status: { $in: ['pending', 'responded'] } })
+      .populate('product', 'name').populate('seller', 'businessName name').sort({ createdAt: -1 }).limit(5);
+    const orders = await Order.find({ buyer: user._id, status: { $in: ['pending_payment', 'paid', 'processing', 'dispatched'] } })
+      .sort({ createdAt: -1 }).limit(5);
+
+    let body = `📊 *Your Status – PrintMart*\n\n`;
+    if (inquiries.length) {
+      body += `*Open Inquiries (${inquiries.length}):*\n`;
+      inquiries.forEach((inq, i) => {
+        body += `${i + 1}. ${inq.product?.name || 'Product'} → ${inq.seller?.businessName || inq.seller?.name || 'Vendor'} [${inq.status}]\n`;
+      });
+      body += '\n';
+    } else body += `No open inquiries.\n\n`;
+
+    if (orders.length) {
+      body += `*Active Orders (${orders.length}):*\n`;
+      orders.forEach((o, i) => {
+        body += `${i + 1}. ${o.orderNumber} – ₹${o.total.toFixed(2)} [${o.status.replace('_', ' ')}]\n`;
+      });
+    } else body += `No active orders.`;
+
+    return wa.sendTextMessage(phone, body, user._id);
+  }
+
+  if (cmd.cmd === 'ORDERS') {
+    const orders = await Order.find({ buyer: user._id }).sort({ createdAt: -1 }).limit(8);
+    if (!orders.length) return wa.sendTextMessage(phone, `You have no orders yet on PrintMart.`, user._id);
+    let body = `📦 *Your Orders – PrintMart*\n\n`;
+    orders.forEach((o, i) => {
+      body += `${i + 1}. *${o.orderNumber}* – ₹${o.total.toFixed(2)}\n   Status: ${o.status.replace(/_/g, ' ')}\n\n`;
+    });
+    body += `Reply *TRACK [order-number]* for tracking details.`;
+    return wa.sendTextMessage(phone, body, user._id);
+  }
+
+  if (cmd.cmd === 'LIST_QUOTES') {
+    const quotes = await Quotation.find({ buyer: user._id, status: 'sent' })
+      .populate('seller', 'businessName name').populate('product', 'name').sort({ createdAt: -1 }).limit(5);
+    if (!quotes.length) return wa.sendTextMessage(phone, `You have no pending quotations.`, user._id);
+    let body = `📋 *Pending Quotations – PrintMart*\n\n`;
+    quotes.forEach((q, i) => {
+      const shortId = String(q._id).slice(-6).toUpperCase();
+      body += `${i + 1}. Q-${shortId} from *${q.seller?.businessName || q.seller?.name}*\n   Product: ${q.product?.name} – ₹${q.total.toFixed(2)}\n\n`;
+    });
+    body += `Reply *ACCEPT* to accept the latest or *ACCEPT Q-[ref]* for specific.`;
+    return wa.sendTextMessage(phone, body, user._id);
+  }
+
+  if (cmd.cmd === 'ACCEPT') {
+    const quotation = await findQuotationForBuyer(user._id, cmd.args, 'sent');
+    if (!quotation) return wa.sendTextMessage(phone, `No pending quotation found to accept. Reply *QUOTES* to see available quotations.`, user._id);
+
+    quotation.status = 'accepted';
+    await quotation.save();
+
+    // Create order
+    const order = await Order.create({
+      quotation: quotation._id,
+      inquiry: quotation.inquiry,
+      buyer: user._id,
+      seller: quotation.seller,
+      product: quotation.product,
+      items: quotation.items,
+      subtotal: quotation.subtotal,
+      tax: quotation.tax,
+      taxAmount: quotation.taxAmount,
+      total: quotation.total,
+      createdViaWhatsapp: true,
+    });
+
+    await wa.sendOrderConfirmation(phone, order, 'buyer', user._id);
+
+    // Notify seller
+    const seller = await User.findById(quotation.seller);
+    if (seller?.phone) {
+      await wa.sendQuotationResponse(seller.phone, order, 'accepted', seller._id);
+    }
+    return;
+  }
+
+  if (cmd.cmd === 'REJECT') {
+    const quotation = await findQuotationForBuyer(user._id, cmd.args, 'sent');
+    if (!quotation) return wa.sendTextMessage(phone, `No pending quotation found. Reply *QUOTES* to see your quotations.`, user._id);
+
+    quotation.status = 'rejected';
+    await quotation.save();
+    await wa.sendTextMessage(phone, `❌ Quotation rejected. The vendor has been notified.`, user._id);
+
+    const seller = await User.findById(quotation.seller);
+    if (seller?.phone) {
+      await wa.sendQuotationResponse(seller.phone, null, 'rejected', seller._id);
+    }
+    return;
+  }
+
+  if (cmd.cmd === 'PAID') {
+    const orderNum = cmd.args;
+    const order = await Order.findOne({ orderNumber: orderNum, buyer: user._id });
+    if (!order) return wa.sendTextMessage(phone, `Order ${orderNum} not found. Reply *ORDERS* to see your orders.`, user._id);
+    if (order.paymentStatus === 'paid') return wa.sendTextMessage(phone, `Payment for ${orderNum} is already confirmed.`, user._id);
+
+    order.paymentStatus = 'paid';
+    order.status = 'paid';
+    order.paymentConfirmedAt = new Date();
+    await order.save();
+
+    await wa.sendPaymentConfirmed(phone, order, 'buyer', user._id);
+    const seller = await User.findById(order.seller);
+    if (seller?.phone) {
+      await wa.sendPaymentConfirmed(seller.phone, order, 'seller', seller._id);
+    }
+    return;
+  }
+
+  if (cmd.cmd === 'TRACK') {
+    const orderNum = cmd.args;
+    const order = await Order.findOne({ $or: [{ orderNumber: orderNum }, { orderNumber: { $regex: orderNum, $options: 'i' } }], buyer: user._id });
+    if (!order) return wa.sendTextMessage(phone, `Order ${orderNum} not found. Reply *ORDERS* to see your orders.`, user._id);
+    const body =
+      `🚚 *Tracking – ${order.orderNumber}*\n\n` +
+      `*Status:* ${order.status.replace(/_/g, ' ').toUpperCase()}\n` +
+      `*Tracking:* ${order.trackingInfo || 'Not dispatched yet'}\n` +
+      `*Total:* ₹${order.total.toFixed(2)}\n` +
+      `*Payment:* ${order.paymentStatus}`;
+    return wa.sendTextMessage(phone, body, user._id);
+  }
+
+  if (cmd.cmd === 'CANCEL') {
+    const orderNum = cmd.args;
+    const order = await Order.findOne({ orderNumber: orderNum, buyer: user._id });
+    if (!order) return wa.sendTextMessage(phone, `Order ${orderNum} not found.`, user._id);
+    if (['delivered', 'dispatched', 'cancelled'].includes(order.status)) {
+      return wa.sendTextMessage(phone, `Cannot cancel order in status: ${order.status}.`, user._id);
+    }
+    order.status = 'cancelled';
+    order.cancelledAt = new Date();
+    order.cancelReason = 'Cancelled by buyer via WhatsApp';
+    await order.save();
+    await wa.sendCancellationNotice(phone, order, 'Cancelled by buyer', user._id);
+    const seller = await User.findById(order.seller);
+    if (seller?.phone) await wa.sendCancellationNotice(seller.phone, order, 'Cancelled by buyer', seller._id);
+    return;
+  }
+
+  // Default: reply to most recent open inquiry
+  const inquiry = await Inquiry.findOne({ buyer: user._id, status: { $in: ['pending', 'responded'] } })
+    .sort({ createdAt: -1 }).populate('seller', 'name phone');
+  if (inquiry) {
+    inquiry.replies.push({ sender: user._id, message: text });
+    await inquiry.save();
+    // Notify seller of buyer reply
+    if (inquiry.seller?.phone) {
+      await wa.sendInquiryReplyToUser(inquiry.seller.phone, user.name, text, inquiry.seller._id);
+    }
+    return wa.sendTextMessage(phone, `✅ Your reply has been sent to the vendor.`, user._id);
+  }
+  return wa.sendWelcomeBuyer(phone, user.name, user._id);
+};
+
+// ─── Seller flows ─────────────────────────────────────────────────────────────
+
+const handleSellerMessage = async (phone, user, text, interactiveId) => {
+  const cmd = interactiveId ? { cmd: interactiveId.toUpperCase() } : parseCommand(text);
+
+  if (cmd.cmd === 'MENU') {
+    return wa.sendWelcomeSeller(phone, user.name, user._id);
+  }
+
+  if (cmd.cmd === 'HELP') {
+    return wa.sendHelpSeller(phone, user._id);
+  }
+
+  if (cmd.cmd === 'STATUS') {
+    const inquiries = await Inquiry.find({ seller: user._id, status: { $in: ['pending', 'responded'] } })
+      .populate('buyer', 'name').populate('product', 'name').sort({ createdAt: -1 }).limit(5);
+    const orders = await Order.find({ seller: user._id, status: { $in: ['paid', 'processing', 'dispatched'] } })
+      .sort({ createdAt: -1 }).limit(5);
+
+    let body = `📊 *Vendor Status – PrintMart*\n\n`;
+    if (inquiries.length) {
+      body += `*Pending Inquiries (${inquiries.length}):*\n`;
+      inquiries.forEach((inq, i) => {
+        const shortId = String(inq._id).slice(-6).toUpperCase();
+        body += `${i + 1}. INQ-${shortId} – ${inq.product?.name || 'Product'} from ${inq.buyer?.name || 'Buyer'} [${inq.status}]\n`;
+      });
+      body += '\n';
+    }
+    if (orders.length) {
+      body += `*Active Orders (${orders.length}):*\n`;
+      orders.forEach((o, i) => {
+        body += `${i + 1}. ${o.orderNumber} – ₹${o.total.toFixed(2)} [${o.status.replace('_', ' ')}]\n`;
+      });
+    }
+    if (!inquiries.length && !orders.length) body += `No pending inquiries or active orders. 🎉`;
+    return wa.sendTextMessage(phone, body, user._id);
+  }
+
+  if (cmd.cmd === 'ORDERS') {
+    const orders = await Order.find({ seller: user._id }).sort({ createdAt: -1 }).limit(8);
+    if (!orders.length) return wa.sendTextMessage(phone, `No orders yet.`, user._id);
+    let body = `📦 *Your Orders – PrintMart*\n\n`;
+    orders.forEach((o, i) => {
+      body += `${i + 1}. *${o.orderNumber}* – ₹${o.total.toFixed(2)}\n   Status: ${o.status.replace(/_/g, ' ')} | Payment: ${o.paymentStatus}\n\n`;
+    });
+    return wa.sendTextMessage(phone, body, user._id);
+  }
+
+  if (cmd.cmd === 'SEND_QUOTE') {
+    const { inquiryRef, amount } = cmd;
+    if (!amount || isNaN(amount) || amount <= 0) {
+      return wa.sendTextMessage(phone, `Invalid amount. Usage: *QUOTE 5000* or *QUOTE INQ-ABC 5000*`, user._id);
+    }
+
+    let inquiry;
+    if (inquiryRef) {
+      const inquiries = await Inquiry.find({ seller: user._id, status: { $in: ['pending', 'responded'] } }).sort({ createdAt: -1 });
+      inquiry = inquiries.find((inq) => String(inq._id).toUpperCase().includes(inquiryRef.replace('INQ-', '').replace('INQ', '')));
+    }
+    if (!inquiry) {
+      inquiry = await Inquiry.findOne({ seller: user._id, status: { $in: ['pending', 'responded'] } }).sort({ createdAt: -1 })
+        .populate('buyer', 'name phone').populate('product', 'name');
+    } else {
+      await inquiry.populate([{ path: 'buyer', select: 'name phone' }, { path: 'product', select: 'name' }]);
+    }
+
+    if (!inquiry) return wa.sendTextMessage(phone, `No open inquiry found. Inquiries must be pending or responded.`, user._id);
+
+    const quotation = await Quotation.create({
+      inquiry: inquiry._id,
+      seller: user._id,
+      buyer: inquiry.buyer._id,
+      product: inquiry.product._id,
+      items: [{ description: inquiry.product?.name || 'Product', quantity: inquiry.quantity || 1, unit: inquiry.unit || 'pcs', unitPrice: amount, total: amount * (inquiry.quantity || 1) }],
+      subtotal: amount * (inquiry.quantity || 1),
+      tax: 0,
+      taxAmount: 0,
+      total: amount * (inquiry.quantity || 1),
+      status: 'sent',
+      whatsappSent: true,
+    });
+
+    // Notify buyer
+    const sellerUser = await User.findById(user._id).select('name businessName');
+    if (inquiry.buyer?.phone) {
+      await wa.sendQuotationToClient(inquiry.buyer.phone, quotation, sellerUser?.businessName || sellerUser?.name, inquiry.buyer._id);
+    }
+
+    const shortId = String(quotation._id).slice(-6).toUpperCase();
+    return wa.sendTextMessage(phone, `✅ Quotation Q-${shortId} sent to ${inquiry.buyer?.name || 'buyer'} for ₹${quotation.total.toFixed(2)}`, user._id);
+  }
+
+  if (cmd.cmd === 'DISPATCH') {
+    const { orderNum, tracking } = cmd;
+    const order = await Order.findOne({ orderNumber: orderNum, seller: user._id });
+    if (!order) return wa.sendTextMessage(phone, `Order ${orderNum} not found.`, user._id);
+    if (!['paid', 'processing'].includes(order.status)) {
+      return wa.sendTextMessage(phone, `Order ${orderNum} is in status "${order.status}" and cannot be dispatched.`, user._id);
+    }
+    order.status = 'dispatched';
+    order.dispatchedAt = new Date();
+    order.trackingInfo = tracking || 'In transit';
+    await order.save();
+    await wa.sendTextMessage(phone, `✅ Order ${orderNum} marked as dispatched with tracking: ${order.trackingInfo}`, user._id);
+    const buyer = await User.findById(order.buyer);
+    if (buyer?.phone) await wa.sendDispatchNotification(buyer.phone, order, buyer._id);
+    return;
+  }
+
+  if (cmd.cmd === 'DELIVER') {
+    const { orderNum } = cmd;
+    const order = await Order.findOne({ orderNumber: orderNum, seller: user._id });
+    if (!order) return wa.sendTextMessage(phone, `Order ${orderNum} not found.`, user._id);
+    if (order.status !== 'dispatched') return wa.sendTextMessage(phone, `Order ${orderNum} must be in "dispatched" status first.`, user._id);
+    order.status = 'delivered';
+    order.deliveredAt = new Date();
+    await order.save();
+    await wa.sendDeliveryConfirmation(phone, order, 'seller', user._id);
+    const buyer = await User.findById(order.buyer);
+    if (buyer?.phone) await wa.sendDeliveryConfirmation(buyer.phone, order, 'buyer', buyer._id);
+    return;
+  }
+
+  // Default: reply to most recent open inquiry
+  const inquiry = await Inquiry.findOne({ seller: user._id, status: { $in: ['pending', 'responded'] } })
+    .sort({ createdAt: -1 }).populate('buyer', 'name phone');
+  if (inquiry) {
+    inquiry.replies.push({ sender: user._id, message: text });
+    inquiry.status = 'responded';
+    await inquiry.save();
+    if (inquiry.buyer?.phone) {
+      await wa.sendInquiryReplyToUser(inquiry.buyer.phone, user.name || 'Vendor', text, inquiry.buyer._id);
+    }
+    return wa.sendTextMessage(phone, `✅ Reply sent to ${inquiry.buyer?.name || 'buyer'}.`, user._id);
+  }
+  return wa.sendWelcomeSeller(phone, user.name, user._id);
+};
+
+// ─── Unknown user flow ────────────────────────────────────────────────────────
+
+const handleUnknownUser = async (phone, text) => {
+  const body =
+    `👋 Welcome to *PrintMart*!\n\n` +
+    `We couldn't find your phone number in our system.\n\n` +
+    `Please register at our website to start using WhatsApp services:\n` +
+    `🌐 printmart.in\n\n` +
+    `Once registered, reply *MENU* to get started.`;
+  return wa.sendTextMessage(phone, body);
+};
+
+// ─── Helper: find quotation ───────────────────────────────────────────────────
+
+const findQuotationForBuyer = async (buyerId, ref, status) => {
+  if (ref) {
+    const allQuotes = await Quotation.find({ buyer: buyerId, status }).sort({ createdAt: -1 });
+    const match = allQuotes.find((q) => String(q._id).toUpperCase().includes(ref.replace('Q-', '').replace('Q', '')));
+    if (match) return match;
+  }
+  return Quotation.findOne({ buyer: buyerId, status }).sort({ createdAt: -1 });
+};
+
+// ─── Main webhook handler ─────────────────────────────────────────────────────
+
 const webhookReceive = async (req, res) => {
+  // Always respond 200 immediately to Meta
+  res.sendStatus(200);
+
   try {
     const body = req.body;
+    if (body.object !== 'whatsapp_business_account') return;
 
-    // Confirm this is a WhatsApp Business Account event
-    if (body.object !== 'whatsapp_business_account') {
-      return res.sendStatus(200);
-    }
+    const changes = body?.entry?.[0]?.changes;
+    if (!changes) return;
 
-    const messages = body?.entry?.[0]?.changes?.[0]?.value?.messages;
+    for (const change of changes) {
+      const value = change?.value;
 
-    if (!messages || messages.length === 0) {
-      return res.sendStatus(200);
-    }
-
-    for (const msg of messages) {
-      const from = msg.from; // sender phone (without leading +)
-      const text = msg?.text?.body || '';
-      const msgType = msg.type;
-
-      console.log(`[WhatsApp] Incoming message from ${from} [${msgType}]: ${text}`);
-
-      if (msgType !== 'text' || !text) continue;
-
-      // Phone may be stored as "9198XXXXXXXX" or "+9198XXXXXXXX"
-      const phoneVariants = [from, `+${from}`];
-
-      // Find the buyer whose phone matches the sender
-      const buyer = await User.findOne({ phone: { $in: phoneVariants } }).select('_id');
-
-      if (!buyer) {
-        console.log(`[WhatsApp] No user found for phone ${from} – ignoring message.`);
+      // Handle status updates (delivered, read, etc.)
+      if (value?.statuses) {
+        for (const status of value.statuses) {
+          await WhatsAppLog.findOneAndUpdate(
+            { waMessageId: status.id },
+            { status: status.status },
+            { upsert: false }
+          ).catch(() => {});
+        }
         continue;
       }
 
-      // Find their most recent open inquiry
-      const inquiry = await Inquiry.findOne({
-        buyer: buyer._id,
-        status: { $in: ['pending', 'responded'] },
-      }).sort({ createdAt: -1 });
+      const messages = value?.messages;
+      if (!messages || !messages.length) continue;
 
-      if (inquiry) {
-        inquiry.replies.push({
-          sender: buyer._id,
-          message: text,
-        });
-        await inquiry.save();
-        console.log(`[WhatsApp] Saved reply to inquiry ${inquiry._id}`);
-      } else {
-        console.log(`[WhatsApp] No open inquiry found for buyer ${buyer._id}.`);
+      for (const msg of messages) {
+        const from = msg.from;
+        const msgType = msg.type;
+        let text = '';
+        let interactiveId = null;
+
+        if (msgType === 'text') {
+          text = msg.text?.body || '';
+        } else if (msgType === 'interactive') {
+          const iType = msg.interactive?.type;
+          if (iType === 'button_reply') {
+            interactiveId = msg.interactive.button_reply?.id || '';
+            text = msg.interactive.button_reply?.title || '';
+          } else if (iType === 'list_reply') {
+            interactiveId = msg.interactive.list_reply?.id || '';
+            text = msg.interactive.list_reply?.title || '';
+          }
+        }
+
+        if (!text && !interactiveId) continue;
+
+        console.log(`[WA-Bot] Message from ${from} [${msgType}]: ${text || interactiveId}`);
+
+        // Log inbound
+        await wa.logMessage({ direction: 'inbound', phone: from, messageType: msgType === 'interactive' ? 'button_reply' : msgType, message: text || interactiveId });
+
+        const phoneVariants = [from, `+${from}`];
+        const user = await User.findOne({ phone: { $in: phoneVariants } });
+        const session = await getOrCreateSession(from, user);
+
+        try {
+          if (!user) {
+            await handleUnknownUser(from, text);
+          } else if (user.role === 'seller' || user.role === 'admin') {
+            await handleSellerMessage(from, user, text, interactiveId);
+          } else {
+            await handleBuyerMessage(from, user, text, interactiveId);
+          }
+        } catch (handlerErr) {
+          console.error(`[WA-Bot] Handler error for ${from}:`, handlerErr.message);
+          await wa.sendTextMessage(from, `Sorry, something went wrong. Please try again or reply *MENU*.`);
+        }
+
+        session.lastActivity = new Date();
+        await session.save();
       }
     }
   } catch (err) {
-    console.error('[WhatsApp] webhookReceive error:', err.message);
+    console.error('[WA-Bot] webhookReceive error:', err.message);
   }
-
-  // Always acknowledge receipt to Meta
-  return res.sendStatus(200);
 };
 
 module.exports = { webhookVerify, webhookReceive };

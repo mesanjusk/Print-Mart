@@ -1,7 +1,7 @@
 const asyncHandler = require('express-async-handler');
 const Inquiry = require('../models/Inquiry');
 const Product = require('../models/Product');
-const { sendInquiryNotificationToSeller, sendInquiryConfirmationToBuyer } = require('../services/whatsapp');
+const { sendInquiryNotificationToSeller, sendInquiryConfirmationToBuyer, sendInquiryReplyToUser } = require('../services/whatsapp');
 
 const createInquiry = asyncHandler(async (req, res) => {
   const { productId, message, quantity, unit } = req.body;
@@ -37,7 +37,9 @@ const createInquiry = asyncHandler(async (req, res) => {
         inquiry.product?.name || 'a product',
         message,
         quantity,
-        unit
+        unit,
+        inquiry._id,
+        inquiry.seller._id
       );
     }
   } catch (err) {
@@ -49,7 +51,8 @@ const createInquiry = asyncHandler(async (req, res) => {
       await sendInquiryConfirmationToBuyer(
         req.user.phone,
         inquiry.product?.name || 'the product',
-        inquiry.seller?.businessName || inquiry.seller?.name || 'the seller'
+        inquiry.seller?.businessName || inquiry.seller?.name || 'the seller',
+        req.user._id
       );
     }
   } catch (err) {
@@ -76,21 +79,32 @@ const getSellerInquiries = asyncHandler(async (req, res) => {
 });
 
 const replyInquiry = asyncHandler(async (req, res) => {
-  const inquiry = await Inquiry.findById(req.params.id);
+  const inquiry = await Inquiry.findById(req.params.id)
+    .populate('buyer', 'name phone')
+    .populate('seller', 'name businessName phone');
   if (!inquiry) {
     res.status(404);
     throw new Error('Inquiry not found');
   }
-  if (inquiry.seller.toString() !== req.user._id.toString() &&
-      inquiry.buyer.toString() !== req.user._id.toString()) {
+  const isSeller = inquiry.seller._id.toString() === req.user._id.toString();
+  const isBuyer = inquiry.buyer._id.toString() === req.user._id.toString();
+  if (!isSeller && !isBuyer) {
     res.status(403);
     throw new Error('Not authorized');
   }
   inquiry.replies.push({ sender: req.user._id, message: req.body.message });
-  if (inquiry.seller.toString() === req.user._id.toString()) {
-    inquiry.status = 'responded';
-  }
+  if (isSeller) inquiry.status = 'responded';
   await inquiry.save();
+
+  // Notify the other party via WhatsApp
+  try {
+    if (isSeller && inquiry.buyer?.phone) {
+      await sendInquiryReplyToUser(inquiry.buyer.phone, inquiry.seller?.businessName || inquiry.seller?.name, req.body.message, inquiry.buyer._id);
+    } else if (isBuyer && inquiry.seller?.phone) {
+      await sendInquiryReplyToUser(inquiry.seller.phone, inquiry.buyer?.name, req.body.message, inquiry.seller._id);
+    }
+  } catch (e) { console.error('[WhatsApp] Reply notify failed:', e.message); }
+
   res.json(inquiry);
 });
 

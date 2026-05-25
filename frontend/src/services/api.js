@@ -69,4 +69,27 @@ export const quotationAPI = {
   updateStatus: (id, status) => api.put(`/quotations/${id}/status`, { status }),
 };
 
+export const orderAPI = {
+  createFromQuotation: (quotationId, data) => api.post(`/orders/from-quotation/${quotationId}`, data),
+  getMyOrders: (params) => api.get('/orders/my', { params }),
+  getVendorOrders: (params) => api.get('/orders/vendor', { params }),
+  getAllOrders: (params) => api.get('/orders', { params }),
+  getById: (id) => api.get(`/orders/${id}`),
+  confirmPayment: (id, data) => api.put(`/orders/${id}/payment`, data),
+  dispatch: (id, data) => api.put(`/orders/${id}/dispatch`, data),
+  deliver: (id) => api.put(`/orders/${id}/deliver`),
+  cancel: (id, data) => api.put(`/orders/${id}/cancel`, data),
+  getStats: () => api.get('/orders/stats'),
+};
+
+export const waAdminAPI = {
+  getStats: () => api.get('/admin/whatsapp/stats'),
+  getLogs: (params) => api.get('/admin/whatsapp/logs', { params }),
+  getConversations: (params) => api.get('/admin/whatsapp/conversations', { params }),
+  getConversationByPhone: (phone, params) => api.get(`/admin/whatsapp/conversation/${phone}`, { params }),
+  getSessions: (params) => api.get('/admin/whatsapp/sessions', { params }),
+  sendBroadcast: (data) => api.post('/admin/whatsapp/broadcast', data),
+  sendDirect: (data) => api.post('/admin/whatsapp/send', data),
+};
+
 export default api;

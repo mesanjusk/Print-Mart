@@ -11,6 +11,7 @@ const app = express();
 
 const ALLOWED_ORIGINS = [
   'https://app.instify.in',
+  'https://shop.instify.in',
   'https://appinstifyin.vercel.app',
   'http://localhost:5173',
   'http://localhost:3000',
@@ -25,9 +26,7 @@ if (process.env.CLIENT_URL) {
 
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (mobile apps, curl, Postman)
     if (!origin) return callback(null, true);
-    // Allow any Vercel preview/production URL and localhost
     if (
       ALLOWED_ORIGINS.includes(origin) ||
       /\.vercel\.app$/.test(origin) ||

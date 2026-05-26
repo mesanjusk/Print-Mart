@@ -7,6 +7,8 @@ import {
 import { productAPI, inquiryAPI, supplierAPI, orderAPI, waAdminAPI } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import Spinner from '../common/Spinner';
+import PremiumBanner from './PremiumBanner';
+import NotificationSetup from './NotificationSetup';
 
 export default function DashboardHome() {
   const { user } = useAuth();
@@ -79,9 +81,11 @@ export default function DashboardHome() {
 
   return (
     <div>
-      <h1 className="text-xl font-bold text-gray-800 mb-6">
+      <h1 className="text-xl font-bold text-gray-800 mb-4">
         {isAdmin ? 'Admin Dashboard' : `Welcome, ${user?.name?.split(' ')[0]}`}
       </h1>
+      <PremiumBanner />
+      {user?.role === 'seller' && <NotificationSetup />}
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         {cards.map((card) => (

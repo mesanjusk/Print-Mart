@@ -11,12 +11,23 @@ cloudinary.config({
 const storage = new CloudinaryStorage({
   cloudinary,
   params: {
-    folder: 'indiamart-clone',
+    folder: 'printmart/products',
     allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
     transformation: [{ width: 800, height: 800, crop: 'limit' }],
   },
 });
 
-const upload = multer({ storage });
+// Design files: PDF, PNG, JPG, AI (stored as-is, no transformation)
+const designStorage = new CloudinaryStorage({
+  cloudinary,
+  params: {
+    folder: 'printmart/designs',
+    allowed_formats: ['jpg', 'jpeg', 'png', 'webp', 'pdf'],
+    resource_type: 'auto',
+  },
+});
 
-module.exports = { cloudinary, upload };
+const upload = multer({ storage });
+const uploadDesign = multer({ storage: designStorage, limits: { fileSize: 20 * 1024 * 1024 } });
+
+module.exports = { cloudinary, upload, uploadDesign };

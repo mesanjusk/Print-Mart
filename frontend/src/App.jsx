@@ -4,6 +4,8 @@ import Layout from './components/layout/Layout';
 import HomePage from './pages/HomePage';
 import ProductsPage from './pages/ProductsPage';
 import ProductDetailPage from './pages/ProductDetailPage';
+import ComparePage from './pages/ComparePage';
+import OfferZonePage from './pages/OfferZonePage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import DashboardPage from './pages/DashboardPage';
@@ -11,6 +13,7 @@ import SuppliersPage from './pages/SuppliersPage';
 import SupplierDetailPage from './pages/SupplierDetailPage';
 import ProtectedRoute from './components/common/ProtectedRoute';
 import NotFoundPage from './pages/NotFoundPage';
+import AdminSetupPage from './pages/AdminSetupPage';
 
 export default function App() {
   return (
@@ -20,6 +23,8 @@ export default function App() {
           <Route path="/" element={<HomePage />} />
           <Route path="/products" element={<ProductsPage />} />
           <Route path="/products/:slug" element={<ProductDetailPage />} />
+          <Route path="/compare" element={<ComparePage />} />
+          <Route path="/offers" element={<OfferZonePage />} />
           <Route path="/suppliers" element={<SuppliersPage />} />
           <Route path="/suppliers/:id" element={<SupplierDetailPage />} />
           <Route path="/login" element={<LoginPage />} />
@@ -32,6 +37,7 @@ export default function App() {
               </ProtectedRoute>
             }
           />
+          <Route path="/setup" element={<AdminSetupPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </Layout>

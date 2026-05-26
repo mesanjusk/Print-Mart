@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: indiamart-clone-api
+    name: printmart-api
     env: node
     region: singapore
     plan: free
@@ -22,4 +22,10 @@ services:
       - key: CLOUDINARY_API_SECRET
         sync: false
       - key: CLIENT_URL
+        value: https://app.instify.in,https://appinstifyin.vercel.app
+      - key: WHATSAPP_PHONE_NUMBER_ID
+        sync: false
+      - key: WHATSAPP_ACCESS_TOKEN
+        sync: false
+      - key: WHATSAPP_VERIFY_TOKEN
         sync: false

@@ -77,6 +77,7 @@ const createProduct = asyncHandler(async (req, res) => {
     specifications: req.body.specifications ? JSON.parse(req.body.specifications) : [],
     tags: req.body.tags ? JSON.parse(req.body.tags) : [],
     price: req.body.price ? JSON.parse(req.body.price) : {},
+    printSpecs: req.body.printSpecs ? JSON.parse(req.body.printSpecs) : undefined,
   });
   res.status(201).json(product);
 });
@@ -92,6 +93,7 @@ const updateProduct = asyncHandler(async (req, res) => {
   if (updates.specifications) updates.specifications = JSON.parse(updates.specifications);
   if (updates.tags) updates.tags = JSON.parse(updates.tags);
   if (updates.price) updates.price = JSON.parse(updates.price);
+  if (updates.printSpecs) updates.printSpecs = JSON.parse(updates.printSpecs);
   Object.assign(product, updates);
   await product.save();
   res.json(product);
@@ -135,6 +137,50 @@ const getSellerProducts = asyncHandler(async (req, res) => {
   res.json(products);
 });
 
+/**
+ * GET /api/products/compare
+ * Find all active products in the same category with matching print specs.
+ * Used to show price comparison across sellers.
+ */
+const compareProducts = asyncHandler(async (req, res) => {
+  const { category, quantity, finish, size, paperWeight, sides } = req.query;
+
+  if (!category) {
+    res.status(400);
+    throw new Error('category is required');
+  }
+
+  const query = { category, isActive: true };
+  if (quantity) query['printSpecs.quantity'] = Number(quantity);
+  if (finish) query['printSpecs.finish'] = finish;
+  if (size) query['printSpecs.size'] = size;
+  if (paperWeight) query['printSpecs.paperWeight'] = Number(paperWeight);
+  if (sides) query['printSpecs.sides'] = sides;
+
+  const products = await Product.find(query)
+    .populate('seller', 'name businessName avatar rating address plan')
+    .populate('category', 'name slug')
+    .sort({ 'price.min': 1 })
+    .lean();
+
+  res.json(products);
+});
+
+/**
+ * PUT /api/products/:id/print-specs
+ * Seller updates print specs for their product.
+ */
+const updatePrintSpecs = asyncHandler(async (req, res) => {
+  const product = await Product.findOne({ _id: req.params.id, seller: req.user._id });
+  if (!product) {
+    res.status(404);
+    throw new Error('Product not found or unauthorized');
+  }
+  product.printSpecs = { ...product.printSpecs?.toObject?.() || {}, ...req.body };
+  await product.save();
+  res.json(product);
+});
+
 module.exports = {
   getProducts,
   getProductBySlug,
@@ -144,4 +190,6 @@ module.exports = {
   deleteProduct,
   addReview,
   getSellerProducts,
+  compareProducts,
+  updatePrintSpecs,
 };

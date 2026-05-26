@@ -23,10 +23,11 @@ api.interceptors.response.use(
 );
 
 export const authAPI = {
+  sendOTP: (data) => api.post('/auth/send-otp', data),
   register: (data) => api.post('/auth/register', data),
   login: (data) => api.post('/auth/login', data),
   forgotPassword: (email) => api.post('/auth/forgot-password', { email }),
-  resetPassword: (token, password) => api.put(`/auth/reset-password/${token}`, { password }),
+  resetPassword: (data) => api.put('/auth/reset-password', data),
   getMe: () => api.get('/auth/me'),
   updateProfile: (data) => api.put('/auth/profile', data),
 };

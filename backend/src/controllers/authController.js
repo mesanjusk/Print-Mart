@@ -1,19 +1,97 @@
 const crypto = require('crypto');
 const asyncHandler = require('express-async-handler');
 const User = require('../models/User');
+const OTP = require('../models/OTP');
 const generateToken = require('../utils/generateToken');
 const { sendTextMessage } = require('../services/whatsapp');
 
-const register = asyncHandler(async (req, res) => {
-  const { name, email, password, role, phone, businessName } = req.body;
-  const exists = await User.findOne({ email });
-  if (exists) {
-    res.status(400);
-    throw new Error('User already exists');
+const generateOTP = () => Math.floor(100000 + Math.random() * 900000).toString();
+const hashOTP = (code) => crypto.createHash('sha256').update(code).digest('hex');
+
+// POST /api/auth/send-otp
+// Sends a WhatsApp OTP for registration or forgot-password
+const sendOTP = asyncHandler(async (req, res) => {
+  const { phone, email, purpose } = req.body;
+
+  if (!purpose || !['registration', 'reset'].includes(purpose)) {
+    res.status(400); throw new Error('Invalid purpose');
   }
+
+  let targetPhone = phone;
+
+  if (purpose === 'reset') {
+    if (!email) { res.status(400); throw new Error('Email is required'); }
+    const user = await User.findOne({ email: email.toLowerCase() });
+    // Always succeed to avoid revealing account existence
+    if (!user || !user.phone) {
+      return res.json({ message: 'OTP sent to your WhatsApp if the account exists.' });
+    }
+    targetPhone = user.phone;
+  } else {
+    if (!phone) { res.status(400); throw new Error('Phone is required'); }
+    const exists = await User.findOne({ phone });
+    if (exists) { res.status(400); throw new Error('Phone number already registered'); }
+  }
+
+  const code = generateOTP();
+
+  // Delete any existing OTP for this phone+purpose
+  await OTP.deleteMany({ phone: targetPhone, purpose });
+
+  await OTP.create({
+    phone: targetPhone,
+    code: hashOTP(code),
+    purpose,
+    email: purpose === 'reset' ? email?.toLowerCase() : undefined,
+  });
+
+  try {
+    await sendTextMessage(
+      targetPhone,
+      `Your PrintMart ${purpose === 'registration' ? 'registration' : 'password reset'} OTP is:\n\n*${code}*\n\nValid for 10 minutes. Do not share this with anyone.`,
+      null
+    );
+  } catch (err) {
+    console.error('[WhatsApp] OTP send failed:', err.message);
+    // For dev/testing — log OTP to console
+    console.log(`[OTP] Code for ${targetPhone}: ${code}`);
+  }
+
+  res.json({ message: 'OTP sent to your WhatsApp.' });
+});
+
+// POST /api/auth/register
+const register = asyncHandler(async (req, res) => {
+  const { name, email, password, role, phone, businessName, otp } = req.body;
+
+  if (!otp) { res.status(400); throw new Error('OTP is required'); }
+  if (!phone) { res.status(400); throw new Error('Phone is required'); }
+
+  const stored = await OTP.findOne({ phone, purpose: 'registration' });
+  if (!stored || stored.code !== hashOTP(otp)) {
+    res.status(400); throw new Error('Invalid or expired OTP');
+  }
+
+  const exists = await User.findOne({ email });
+  if (exists) { res.status(400); throw new Error('User already exists'); }
+
   const allowedRoles = ['buyer', 'seller'];
   const safeRole = allowedRoles.includes(role) ? role : 'buyer';
-  const user = await User.create({ name, email, password, role: safeRole, phone, businessName });
+
+  const user = await User.create({ name, email, password, role: safeRole, phone, businessName, isVerified: true });
+
+  // Clean up OTP
+  await OTP.deleteMany({ phone, purpose: 'registration' });
+
+  // Welcome message
+  try {
+    await sendTextMessage(
+      phone,
+      `Welcome to PrintMart, ${name}! 🎉\n\nYour ${safeRole} account is ready.\n\nVisit your dashboard to get started.`,
+      user._id
+    );
+  } catch (_) {}
+
   res.status(201).json({
     _id: user._id,
     name: user.name,
@@ -27,8 +105,7 @@ const login = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
   const user = await User.findOne({ email });
   if (!user || !(await user.matchPassword(password))) {
-    res.status(401);
-    throw new Error('Invalid email or password');
+    res.status(401); throw new Error('Invalid email or password');
   }
   res.json({
     _id: user._id,
@@ -63,65 +140,56 @@ const updateProfile = asyncHandler(async (req, res) => {
   });
 });
 
+// POST /api/auth/forgot-password — sends OTP via WhatsApp
 const forgotPassword = asyncHandler(async (req, res) => {
   const { email } = req.body;
   if (!email) { res.status(400); throw new Error('Email is required'); }
 
   const user = await User.findOne({ email: email.toLowerCase() });
-  // Always return success to avoid revealing whether email exists
-  if (!user) {
-    return res.json({ message: 'If that email exists, a reset link has been sent.' });
+  if (!user || !user.phone) {
+    return res.json({ message: 'OTP sent to your WhatsApp if the account exists.' });
   }
 
-  const token = crypto.randomBytes(32).toString('hex');
-  user.resetPasswordToken = crypto.createHash('sha256').update(token).digest('hex');
-  user.resetPasswordExpires = Date.now() + 60 * 60 * 1000; // 1 hour
-  await user.save({ validateBeforeSave: false });
+  const code = generateOTP();
+  await OTP.deleteMany({ phone: user.phone, purpose: 'reset' });
+  await OTP.create({ phone: user.phone, code: hashOTP(code), purpose: 'reset', email: user.email });
 
-  const clientUrl = process.env.CLIENT_URL?.split(',')[0]?.trim() || 'http://localhost:5173';
-  const resetUrl = `${clientUrl}/reset-password/${token}`;
-
-  // Send via WhatsApp if user has a phone number
-  if (user.phone) {
-    try {
-      await sendTextMessage(
-        user.phone,
-        `Hi ${user.name}! 👋\n\nYou requested a password reset for your PrintMart account.\n\nClick the link below to set a new password (valid for 1 hour):\n${resetUrl}\n\nIf you didn't request this, ignore this message.`,
-        user._id
-      );
-    } catch (err) {
-      console.error('[WhatsApp] Failed to send reset message:', err.message);
-    }
-  } else {
-    // No phone — log the link so it can be found in server logs
-    console.log(`[ForgotPassword] Reset link for ${user.email}: ${resetUrl}`);
+  try {
+    await sendTextMessage(
+      user.phone,
+      `Your PrintMart password reset OTP is:\n\n*${code}*\n\nValid for 10 minutes. Do not share this with anyone.`,
+      user._id
+    );
+  } catch (err) {
+    console.error('[WhatsApp] Reset OTP send failed:', err.message);
+    console.log(`[OTP] Reset code for ${user.phone}: ${code}`);
   }
 
-  res.json({ message: 'If that email exists, a reset link has been sent via WhatsApp.' });
+  res.json({ message: 'OTP sent to your WhatsApp.' });
 });
 
+// PUT /api/auth/reset-password — verify OTP and set new password
 const resetPassword = asyncHandler(async (req, res) => {
-  const { token } = req.params;
-  const { password } = req.body;
+  const { email, otp, password } = req.body;
 
-  if (!password || password.length < 6) {
+  if (!email || !otp || !password) {
+    res.status(400); throw new Error('Email, OTP and new password are required');
+  }
+  if (password.length < 6) {
     res.status(400); throw new Error('Password must be at least 6 characters');
   }
 
-  const hashed = crypto.createHash('sha256').update(token).digest('hex');
-  const user = await User.findOne({
-    resetPasswordToken: hashed,
-    resetPasswordExpires: { $gt: Date.now() },
-  });
+  const user = await User.findOne({ email: email.toLowerCase() });
+  if (!user) { res.status(400); throw new Error('Invalid OTP or email'); }
 
-  if (!user) {
-    res.status(400); throw new Error('Reset link is invalid or has expired');
+  const stored = await OTP.findOne({ phone: user.phone, purpose: 'reset' });
+  if (!stored || stored.code !== hashOTP(otp)) {
+    res.status(400); throw new Error('Invalid or expired OTP');
   }
 
   user.password = password;
-  user.resetPasswordToken = undefined;
-  user.resetPasswordExpires = undefined;
   await user.save();
+  await OTP.deleteMany({ phone: user.phone, purpose: 'reset' });
 
   res.json({
     message: 'Password reset successfully',
@@ -133,4 +201,4 @@ const resetPassword = asyncHandler(async (req, res) => {
   });
 });
 
-module.exports = { register, login, getMe, updateProfile, forgotPassword, resetPassword };
+module.exports = { sendOTP, register, login, getMe, updateProfile, forgotPassword, resetPassword };

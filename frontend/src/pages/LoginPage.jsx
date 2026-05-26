@@ -47,6 +47,11 @@ export default function LoginPage() {
                 onChange={(e) => setForm({ ...form, password: e.target.value })}
                 className="input" placeholder="••••••••" />
             </div>
+            <div className="flex justify-end -mt-2">
+              <Link to="/forgot-password" className="text-sm text-green-600 hover:text-green-700">
+                Forgot password?
+              </Link>
+            </div>
             <button type="submit" disabled={loading} className="btn-primary w-full py-2.5 text-base">
               {loading ? 'Logging in...' : 'Login'}
             </button>

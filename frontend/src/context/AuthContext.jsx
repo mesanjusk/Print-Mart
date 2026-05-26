@@ -9,6 +9,19 @@ export function AuthProvider({ children }) {
   });
   const [loading, setLoading] = useState(false);
 
+  // On app load, refresh user data from server to pick up role changes (e.g. buyer → admin)
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+    authAPI.getMe()
+      .then(({ data }) => {
+        const refreshed = { ...JSON.parse(localStorage.getItem('user') || '{}'), ...data };
+        localStorage.setItem('user', JSON.stringify(refreshed));
+        setUser(refreshed);
+      })
+      .catch(() => {}); // silently ignore if token expired
+  }, []);
+
   const login = async (email, password) => {
     setLoading(true);
     const { data } = await authAPI.login({ email, password });

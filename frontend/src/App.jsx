@@ -14,6 +14,7 @@ import SupplierDetailPage from './pages/SupplierDetailPage';
 import ProtectedRoute from './components/common/ProtectedRoute';
 import NotFoundPage from './pages/NotFoundPage';
 import AdminSetupPage from './pages/AdminSetupPage';
+import ForgotPasswordPage from './pages/ForgotPasswordPage';
 
 export default function App() {
   return (
@@ -38,6 +39,7 @@ export default function App() {
             }
           />
           <Route path="/setup" element={<AdminSetupPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </Layout>

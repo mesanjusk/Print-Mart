@@ -1,8 +1,8 @@
 const crypto = require('crypto');
 const asyncHandler = require('express-async-handler');
-const nodemailer = require('nodemailer');
 const User = require('../models/User');
 const generateToken = require('../utils/generateToken');
+const { sendTextMessage } = require('../services/whatsapp');
 
 const register = asyncHandler(async (req, res) => {
   const { name, email, password, role, phone, businessName } = req.body;
@@ -81,41 +81,23 @@ const forgotPassword = asyncHandler(async (req, res) => {
   const clientUrl = process.env.CLIENT_URL?.split(',')[0]?.trim() || 'http://localhost:5173';
   const resetUrl = `${clientUrl}/reset-password/${token}`;
 
-  // Send email if configured
-  if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+  // Send via WhatsApp if user has a phone number
+  if (user.phone) {
     try {
-      const transporter = nodemailer.createTransport({
-        host: process.env.EMAIL_HOST || 'smtp.gmail.com',
-        port: Number(process.env.EMAIL_PORT) || 587,
-        auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
-      });
-      await transporter.sendMail({
-        from: `"PrintMart" <${process.env.EMAIL_USER}>`,
-        to: user.email,
-        subject: 'PrintMart — Reset Your Password',
-        html: `
-          <div style="font-family:sans-serif;max-width:480px;margin:auto">
-            <h2 style="color:#16a34a">Reset Your Password</h2>
-            <p>Hi ${user.name},</p>
-            <p>Click the button below to reset your password. This link expires in 1 hour.</p>
-            <a href="${resetUrl}" style="display:inline-block;background:#16a34a;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold;margin:16px 0">
-              Reset Password
-            </a>
-            <p style="color:#6b7280;font-size:13px">Or copy this link: ${resetUrl}</p>
-            <p style="color:#6b7280;font-size:13px">If you didn't request this, ignore this email.</p>
-          </div>
-        `,
-      });
+      await sendTextMessage(
+        user.phone,
+        `Hi ${user.name}! 👋\n\nYou requested a password reset for your PrintMart account.\n\nClick the link below to set a new password (valid for 1 hour):\n${resetUrl}\n\nIf you didn't request this, ignore this message.`,
+        user._id
+      );
     } catch (err) {
-      console.error('[Email] Failed to send reset email:', err.message);
-      // Don't fail the request — the token is still saved
+      console.error('[WhatsApp] Failed to send reset message:', err.message);
     }
   } else {
-    // No email configured — log the link so admin can find it
+    // No phone — log the link so it can be found in server logs
     console.log(`[ForgotPassword] Reset link for ${user.email}: ${resetUrl}`);
   }
 
-  res.json({ message: 'If that email exists, a reset link has been sent.' });
+  res.json({ message: 'If that email exists, a reset link has been sent via WhatsApp.' });
 });
 
 const resetPassword = asyncHandler(async (req, res) => {

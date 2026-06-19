@@ -6,7 +6,7 @@ const userSchema = new mongoose.Schema({
   email: { type: String, required: true, unique: true, lowercase: true },
   password: { type: String, required: true, minlength: 6 },
   phone: { type: String },
-  role: { type: String, enum: ['buyer', 'seller', 'admin'], default: 'buyer' },
+  role: { type: String, enum: ['buyer', 'seller', 'admin', 'superadmin'], default: 'buyer' },
   avatar: { type: String, default: '' },
   isVerified: { type: Boolean, default: false },
   isActive: { type: Boolean, default: true },
@@ -34,6 +34,10 @@ const userSchema = new mongoose.Schema({
     },
   },
   pushEnabled: { type: Boolean, default: false },
+  emailVerifyToken: { type: String },
+  emailVerifyExpire: { type: Date },
+  resetPasswordToken: { type: String },
+  resetPasswordExpire: { type: Date },
 }, { timestamps: true });
 
 userSchema.pre('save', async function (next) {

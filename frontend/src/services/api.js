@@ -27,6 +27,10 @@ export const authAPI = {
   login: (data) => api.post('/auth/login', data),
   getMe: () => api.get('/auth/me'),
   updateProfile: (data) => api.put('/auth/profile', data),
+  forgotPassword: (email) => api.post('/auth/forgot-password', { email }),
+  resetPassword: (token, password) => api.post('/auth/reset-password', { token, password }),
+  verifyEmail: (token) => api.get(`/auth/verify-email?token=${token}`),
+  resendVerification: () => api.post('/auth/resend-verification'),
 };
 
 export const productAPI = {
@@ -107,6 +111,7 @@ export const userAPI = {
   getAll: () => api.get('/users'),
   toggleStatus: (id) => api.put(`/users/${id}/status`),
   togglePremium: (id) => api.put(`/users/${id}/premium`),
+  changeRole: (id, role) => api.put(`/users/${id}/role`, { role }),
   getMyPlan: () => api.get('/users/me/plan'),
 };
 

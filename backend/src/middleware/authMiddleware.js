@@ -25,7 +25,11 @@ const protect = asyncHandler(async (req, res, next) => {
 });
 
 const authorize = (...roles) => (req, res, next) => {
-  if (!roles.includes(req.user.role)) {
+  // superadmin inherits all admin privileges automatically
+  const effectiveRole = req.user.role === 'superadmin' && roles.includes('admin')
+    ? 'admin'
+    : req.user.role;
+  if (!roles.includes(effectiveRole) && req.user.role !== 'superadmin') {
     res.status(403);
     throw new Error('Not authorized for this action');
   }

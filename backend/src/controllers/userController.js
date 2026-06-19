@@ -41,16 +41,29 @@ const createAdmin = asyncHandler(async (req, res) => {
   });
 });
 
-// PUT /api/users/:id/role  (admin only)
+// PUT /api/users/:id/role  (admin/superadmin only)
 const updateUserRole = asyncHandler(async (req, res) => {
   const { role } = req.body;
-  if (!['buyer', 'seller', 'admin'].includes(role)) {
+  const validRoles = ['buyer', 'seller', 'admin', 'superadmin'];
+  if (!validRoles.includes(role)) {
     res.status(400);
-    throw new Error('role must be buyer, seller, or admin');
+    throw new Error('role must be buyer, seller, admin, or superadmin');
   }
-  const user = await User.findByIdAndUpdate(req.params.id, { role }, { new: true }).select('-password');
-  if (!user) { res.status(404); throw new Error('User not found'); }
-  res.json(user);
+  // Only superadmin can assign/remove the superadmin role
+  if (role === 'superadmin' && req.user.role !== 'superadmin') {
+    res.status(403);
+    throw new Error('Only a superadmin can assign the superadmin role');
+  }
+  const target = await User.findById(req.params.id);
+  if (!target) { res.status(404); throw new Error('User not found'); }
+  // Prevent demoting a superadmin unless requester is superadmin
+  if (target.role === 'superadmin' && req.user.role !== 'superadmin') {
+    res.status(403);
+    throw new Error('Only a superadmin can change another superadmin\'s role');
+  }
+  target.role = role;
+  await target.save();
+  res.json(await User.findById(target._id).select('-password'));
 });
 
 const togglePremium = asyncHandler(async (req, res) => {

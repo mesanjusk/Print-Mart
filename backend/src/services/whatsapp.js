@@ -92,6 +92,66 @@ const sendListMessage = async (to, bodyText, buttonLabel, sections, userId) => {
   return result;
 };
 
+// ─── Template Messages (Meta pre-approved required for business-initiated) ───
+
+const sendTemplateMessage = async (to, templateName, languageCode, components, userId) => {
+  const payload = {
+    type: 'template',
+    template: {
+      name: templateName,
+      language: { code: languageCode || 'en' },
+      ...(components?.length ? { components } : {}),
+    },
+  };
+  const result = await sendRaw(to, payload);
+  await logMessage({
+    direction: 'outbound',
+    phone: normalisePhone(to),
+    userId,
+    messageType: 'template',
+    message: templateName,
+    metadata: { templateName, components },
+    waMessageId: result?.messages?.[0]?.id,
+  });
+  return result;
+};
+
+// Requires Meta-approved AUTHENTICATION template: printmart_account_verification
+// Template body: "{{1}} is your PrintMart verification code. Valid for 10 minutes. Do not share this code."
+const sendVerificationOTP = async (phone, otp, userId) => {
+  if (!phone) return null;
+  return sendTemplateMessage(phone, 'printmart_account_verification', 'en', [
+    {
+      type: 'body',
+      parameters: [{ type: 'text', text: otp }],
+    },
+    {
+      type: 'button',
+      sub_type: 'url',
+      index: '0',
+      parameters: [{ type: 'text', text: otp }],
+    },
+  ], userId);
+};
+
+// Requires Meta-approved AUTHENTICATION template: printmart_password_reset
+// Template body: "{{1}} is your PrintMart password reset code. Valid for 10 minutes. Do not share this code."
+const sendPasswordResetOTP = async (phone, otp, userId) => {
+  if (!phone) return null;
+  return sendTemplateMessage(phone, 'printmart_password_reset', 'en', [
+    {
+      type: 'body',
+      parameters: [{ type: 'text', text: otp }],
+    },
+    {
+      type: 'button',
+      sub_type: 'url',
+      index: '0',
+      parameters: [{ type: 'text', text: otp }],
+    },
+  ], userId);
+};
+
 // ─── Business Notification Messages ─────────────────────────────────────────
 
 const sendWelcomeBuyer = async (phone, name, userId) => {
@@ -358,6 +418,9 @@ const verifyWebhook = (mode, token, challenge) => {
 
 module.exports = {
   normalisePhone,
+  sendTemplateMessage,
+  sendVerificationOTP,
+  sendPasswordResetOTP,
   sendTextMessage,
   sendButtonMessage,
   sendListMessage,

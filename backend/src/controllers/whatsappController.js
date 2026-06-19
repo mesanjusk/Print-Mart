@@ -37,6 +37,7 @@ const getOrCreateSession = async (phone, user) => {
     session.role = user.role;
   }
   session.lastActivity = new Date();
+  // Track 24h customer service window — updated only on inbound
   return session;
 };
 
@@ -466,18 +467,62 @@ const webhookReceive = async (req, res) => {
         const phoneVariants = [from, `+${from}`];
         const user = await User.findOne({ phone: { $in: phoneVariants } });
         const session = await getOrCreateSession(from, user);
+        // Update 24h customer service window timestamp on every inbound message
+        session.lastInboundAt = new Date();
 
-        try {
-          if (!user) {
-            await handleUnknownUser(from, text);
-          } else if (user.role === 'seller' || user.role === 'admin') {
-            await handleSellerMessage(from, user, text, interactiveId);
-          } else {
-            await handleBuyerMessage(from, user, text, interactiveId);
+        // Check active auto-reply campaigns before normal handler
+        let handledByAutoReply = false;
+        if (text) {
+          try {
+            const WhatsAppCampaign = require('../models/WhatsAppCampaign');
+            const WhatsAppOptOut = require('../models/WhatsAppOptOut');
+            const isOptedOut = await WhatsAppOptOut.findOne({ phone: from });
+            if (!isOptedOut) {
+              const campaigns = await WhatsAppCampaign.find({ type: 'auto_reply', status: 'active' });
+              const lowerText = text.toLowerCase().trim();
+              for (const camp of campaigns) {
+                const userRole = user?.role || 'unknown';
+                const rolesMatch = !camp.trigger.roles?.length ||
+                  camp.trigger.roles.includes('any') || camp.trigger.roles.includes(userRole);
+                if (!rolesMatch) continue;
+                const match = camp.trigger.keywords?.some((kw) => {
+                  if (camp.trigger.matchType === 'exact') return lowerText === kw;
+                  if (camp.trigger.matchType === 'starts_with') return lowerText.startsWith(kw);
+                  return lowerText.includes(kw); // contains
+                });
+                if (match) {
+                  if (camp.response.messageType === 'template' && camp.response.templateName) {
+                    const components = camp.response.templateParams?.length
+                      ? [{ type: 'body', parameters: camp.response.templateParams.map((t) => ({ type: 'text', text: t })) }] : [];
+                    await wa.sendTemplateMessage(from, camp.response.templateName, camp.response.templateLanguage || 'en', components);
+                  } else {
+                    await wa.sendTextMessage(from, camp.response.content);
+                  }
+                  camp.stats.sent = (camp.stats.sent || 0) + 1;
+                  await camp.save();
+                  handledByAutoReply = true;
+                  break;
+                }
+              }
+            }
+          } catch (arErr) {
+            console.error('[WA-Bot] Auto-reply check error:', arErr.message);
           }
-        } catch (handlerErr) {
-          console.error(`[WA-Bot] Handler error for ${from}:`, handlerErr.message);
-          await wa.sendTextMessage(from, `Sorry, something went wrong. Please try again or reply *MENU*.`);
+        }
+
+        if (!handledByAutoReply) {
+          try {
+            if (!user) {
+              await handleUnknownUser(from, text);
+            } else if (user.role === 'seller' || user.role === 'admin') {
+              await handleSellerMessage(from, user, text, interactiveId);
+            } else {
+              await handleBuyerMessage(from, user, text, interactiveId);
+            }
+          } catch (handlerErr) {
+            console.error(`[WA-Bot] Handler error for ${from}:`, handlerErr.message);
+            await wa.sendTextMessage(from, `Sorry, something went wrong. Please try again or reply *MENU*.`);
+          }
         }
 
         session.lastActivity = new Date();

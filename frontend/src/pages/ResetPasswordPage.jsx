@@ -7,31 +7,97 @@ export default function ResetPasswordPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const token = searchParams.get('token');
+  const isOTPMode = searchParams.get('method') === 'otp' || (!token);
+
+  // OTP flow state
+  const [otp, setOtp] = useState('');
+  const [otpVerified, setOtpVerified] = useState(false);
+  const [userId, setUserId] = useState(null);
+  const [verifying, setVerifying] = useState(false);
+
+  // Password state
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e) => {
+  const handleOTPVerify = async (e) => {
+    e.preventDefault();
+    if (otp.length !== 6) return toast.error('Enter the 6-digit OTP');
+    setVerifying(true);
+    try {
+      const { data } = await authAPI.verifyOTP(otp, 'reset_password');
+      setUserId(data.userId);
+      setOtpVerified(true);
+      toast.success('OTP verified. Set your new password.');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Invalid or expired OTP');
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  const handleReset = async (e) => {
     e.preventDefault();
     if (password !== confirm) return toast.error('Passwords do not match');
     if (password.length < 6) return toast.error('Password must be at least 6 characters');
     setLoading(true);
     try {
-      await authAPI.resetPassword(token, password);
+      if (isOTPMode) {
+        await authAPI.resetPasswordWithOTP(userId, otp, password);
+      } else {
+        await authAPI.resetPassword(token, password);
+      }
       toast.success('Password reset! Please log in.');
       navigate('/login');
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Reset failed. Link may have expired.');
+      toast.error(err.response?.data?.message || 'Reset failed. The link or OTP may have expired.');
     } finally {
       setLoading(false);
     }
   };
 
-  if (!token) {
+  if (isOTPMode && !otpVerified) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4 py-12">
+        <div className="max-w-md w-full">
+          <div className="text-center mb-8">
+            <div className="w-14 h-14 bg-green-600 rounded-full flex items-center justify-center mx-auto mb-3">
+              <span className="text-white font-bold text-xl">PM</span>
+            </div>
+            <h1 className="text-2xl font-bold text-gray-800">WhatsApp OTP Reset</h1>
+            <p className="text-gray-500 text-sm mt-1">Enter the 6-digit OTP sent to your WhatsApp</p>
+          </div>
+          <div className="card p-8">
+            <form onSubmit={handleOTPVerify} className="space-y-4">
+              <input
+                type="text"
+                inputMode="numeric"
+                maxLength={6}
+                value={otp}
+                onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
+                placeholder="6-digit OTP"
+                className="input text-center text-2xl tracking-widest"
+                required
+              />
+              <button type="submit" disabled={verifying} className="btn-primary w-full py-2.5">
+                {verifying ? 'Verifying...' : 'Verify OTP'}
+              </button>
+              <div className="text-center space-y-1">
+                <Link to="/reset-password" className="block text-sm text-green-600 hover:text-green-700">Use email link instead</Link>
+                <Link to="/forgot-password" className="block text-sm text-gray-500 hover:text-gray-700">Resend OTP</Link>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!token && !otpVerified) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
         <div className="text-center">
-          <p className="text-red-600 font-medium mb-4">Invalid or missing reset token.</p>
+          <p className="text-red-600 font-medium mb-4">No reset token found.</p>
           <Link to="/forgot-password" className="text-green-600 hover:text-green-700 font-medium">Request a new link</Link>
         </div>
       </div>
@@ -45,11 +111,13 @@ export default function ResetPasswordPage() {
           <div className="w-14 h-14 bg-green-600 rounded-full flex items-center justify-center mx-auto mb-3">
             <span className="text-white font-bold text-xl">PM</span>
           </div>
-          <h1 className="text-2xl font-bold text-gray-800">Reset Password</h1>
-          <p className="text-gray-500 text-sm mt-1">Enter your new password</p>
+          <h1 className="text-2xl font-bold text-gray-800">Set New Password</h1>
+          <p className="text-gray-500 text-sm mt-1">
+            {isOTPMode ? 'OTP verified — enter your new password' : 'Enter your new password'}
+          </p>
         </div>
         <div className="card p-8">
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleReset} className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">New Password</label>
               <input type="password" required value={password}

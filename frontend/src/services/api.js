@@ -29,7 +29,9 @@ export const authAPI = {
   updateProfile: (data) => api.put('/auth/profile', data),
   forgotPassword: (email) => api.post('/auth/forgot-password', { email }),
   resetPassword: (token, password) => api.post('/auth/reset-password', { token, password }),
+  resetPasswordWithOTP: (userId, otp, password) => api.post('/auth/reset-password-otp', { userId, otp, password }),
   verifyEmail: (token) => api.get(`/auth/verify-email?token=${token}`),
+  verifyOTP: (otp, purpose) => api.post('/auth/verify-otp', { otp, purpose }),
   resendVerification: () => api.post('/auth/resend-verification'),
 };
 

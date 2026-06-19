@@ -8,6 +8,8 @@ const whatsAppSessionSchema = new mongoose.Schema(
     state: { type: String, default: 'idle' },
     context: { type: mongoose.Schema.Types.Mixed, default: {} },
     lastActivity: { type: Date, default: Date.now },
+    lastInboundAt: { type: Date }, // tracks 24h customer service window
+    optedOut: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

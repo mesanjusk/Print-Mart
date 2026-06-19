@@ -99,9 +99,25 @@ export const waAdminAPI = {
   getLogs: (params) => api.get('/admin/whatsapp/logs', { params }),
   getConversations: (params) => api.get('/admin/whatsapp/conversations', { params }),
   getConversationByPhone: (phone, params) => api.get(`/admin/whatsapp/conversation/${phone}`, { params }),
+  replyToConversation: (phone, data) => api.post(`/admin/whatsapp/conversation/${phone}/reply`, data),
   getSessions: (params) => api.get('/admin/whatsapp/sessions', { params }),
   sendBroadcast: (data) => api.post('/admin/whatsapp/broadcast', data),
   sendDirect: (data) => api.post('/admin/whatsapp/send', data),
+  // Campaigns
+  getCampaigns: (params) => api.get('/admin/whatsapp/campaigns', { params }),
+  createCampaign: (data) => api.post('/admin/whatsapp/campaigns', data),
+  updateCampaign: (id, data) => api.put(`/admin/whatsapp/campaigns/${id}`, data),
+  deleteCampaign: (id) => api.delete(`/admin/whatsapp/campaigns/${id}`),
+  runCampaign: (id) => api.post(`/admin/whatsapp/campaigns/${id}/run`),
+  // Opt-outs
+  getOptOuts: () => api.get('/admin/whatsapp/optouts'),
+  addOptOut: (data) => api.post('/admin/whatsapp/optouts', data),
+  removeOptOut: (id) => api.delete(`/admin/whatsapp/optouts/${id}`),
+  // 24h window
+  getWindowStatus: () => api.get('/admin/whatsapp/window-status'),
+  // Templates
+  getTemplates: () => api.get('/admin/whatsapp/templates'),
+  syncTemplates: () => api.post('/admin/whatsapp/templates/sync'),
 };
 
 export const compareAPI = {

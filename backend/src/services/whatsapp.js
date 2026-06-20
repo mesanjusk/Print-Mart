@@ -193,7 +193,9 @@ const sendHelpBuyer = async (phone, userId) => {
     `  e.g.  PAID PM-2024-0001\n` +
     `*TRACK [order-number]* – Get tracking info\n` +
     `  e.g.  TRACK PM-2024-0001\n` +
-    `*CANCEL [order-number]* – Cancel order\n\n` +
+    `*CANCEL [order-number]* – Cancel order\n` +
+    `*SELLER* – Upgrade account to Seller\n` +
+    `*RESET* – Get a new temporary password\n\n` +
     `Or just type a message to reply to your latest inquiry.`;
   return sendTextMessage(phone, body, userId);
 };

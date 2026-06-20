@@ -75,8 +75,35 @@ const parseCommand = (text) => {
 
 // ─── Buyer flows ─────────────────────────────────────────────────────────────
 
-const handleBuyerMessage = async (phone, user, text, interactiveId) => {
+const handleBuyerMessage = async (phone, user, text, interactiveId, session) => {
   const cmd = interactiveId ? { cmd: interactiveId.toUpperCase() } : parseCommand(text);
+  const upperText = text?.trim().toUpperCase();
+
+  // Seller upgrade confirmation
+  if (session?.state === 'upgrade_seller_confirm') {
+    if (upperText === 'YES') {
+      user.role = 'seller';
+      await user.save();
+      session.state = 'idle';
+      session.role = 'seller';
+      await session.save();
+      return wa.sendTextMessage(phone,
+        `🎉 *Account Upgraded to Seller!*\n\n` +
+        `Welcome to the PrintMart seller community, *${user.name}*!\n\n` +
+        `Next steps:\n` +
+        `1. Login to your account\n` +
+        `2. Complete your business profile\n` +
+        `3. Add your products/services\n\n` +
+        `🔗 ${process.env.CLIENT_URL || 'https://app.instify.in'}/login\n\n` +
+        `Reply *MENU* to see your new seller commands.`,
+        user._id
+      );
+    } else {
+      session.state = 'idle';
+      await session.save();
+      return wa.sendTextMessage(phone, `No problem! You remain a buyer. Reply *MENU* anytime.`, user._id);
+    }
+  }
 
   if (cmd.cmd === 'MENU') {
     return wa.sendWelcomeBuyer(phone, user.name, user._id);
@@ -397,6 +424,23 @@ const handleUnknownUser = async (phone, text, session) => {
 
   // Entry points
   if (state === 'idle' || !state.startsWith('reg_')) {
+    // Guest inquiry — no registration needed
+    if (['INQUIRE', 'INQUIRY', 'ENQUIRE', 'ENQUIRY', 'QUOTE', 'PRICE'].includes(cmd)) {
+      session.state = 'guest_inquiry';
+      session.context = {};
+      await session.save();
+      return wa.sendTextMessage(phone,
+        `📩 *Send an Inquiry – No Registration Needed!*\n\n` +
+        `Just tell us what you're looking for:\n\n` +
+        `Type your message in this format:\n` +
+        `*Product name | Quantity | Your name*\n\n` +
+        `Example:\n` +
+        `_Business Cards | 500 pcs | Rahul_\n\n` +
+        `We'll forward your inquiry to relevant sellers and they'll contact you here on WhatsApp! 📱\n\n` +
+        `💡 Register for free to track all your inquiries: reply *REGISTER*`
+      );
+    }
+
     if (['REGISTER', 'JOIN', 'SIGNUP', 'NEW ACCOUNT', 'START'].includes(cmd)) {
       session.state = 'reg_role';
       session.context = {};
@@ -509,13 +553,60 @@ const handleUnknownUser = async (phone, text, session) => {
     return;
   }
 
+  // Guest inquiry submission
+  if (state === 'guest_inquiry') {
+    const parts = text.split('|').map((s) => s.trim());
+    const productName = parts[0];
+    const quantity = parts[1] || 'Not specified';
+    const guestName = parts[2] || 'Guest';
+
+    if (!productName || productName.length < 2) {
+      return wa.sendTextMessage(phone,
+        `Please use the format:\n*Product | Quantity | Your name*\n\nExample:\n_Business Cards | 500 pcs | Rahul_`
+      );
+    }
+
+    // Save as a guest inquiry in WhatsApp log (no DB Inquiry record — no registered user)
+    await wa.logMessage({
+      direction: 'inbound',
+      phone,
+      messageType: 'text',
+      message: `[GUEST INQUIRY] ${text}`,
+    });
+
+    session.state = 'idle';
+    session.context = {};
+    await session.save();
+
+    // Notify admin via WhatsApp
+    const adminPhone = process.env.ADMIN_WHATSAPP_PHONE;
+    if (adminPhone) {
+      await wa.sendTextMessage(adminPhone,
+        `📩 *New Guest Inquiry*\n\n` +
+        `📱 From: +${phone}\n` +
+        `👤 Name: ${guestName}\n` +
+        `📦 Product: ${productName}\n` +
+        `📊 Quantity: ${quantity}\n\n` +
+        `Reply directly to this number on WhatsApp to follow up.`
+      ).catch(() => {});
+    }
+
+    return wa.sendTextMessage(phone,
+      `✅ *Inquiry Received!*\n\n` +
+      `*Product:* ${productName}\n` +
+      `*Quantity:* ${quantity}\n\n` +
+      `Our team will connect you with the right sellers shortly. They'll message you here on WhatsApp.\n\n` +
+      `📝 Register for free to track your inquiries:\nReply *REGISTER*`
+    );
+  }
+
   // Reset flow
   if (cmd === 'RESET') {
     session.state = 'idle';
     session.context = {};
     await session.save();
     return wa.sendTextMessage(phone,
-      `To reset your password, visit:\n${process.env.CLIENT_URL || 'https://print-mart.vercel.app'}/forgot-password`
+      `To reset your password, visit:\n${process.env.CLIENT_URL || 'https://app.instify.in'}/forgot-password`
     );
   }
 
@@ -524,7 +615,10 @@ const handleUnknownUser = async (phone, text, session) => {
   session.context = {};
   await session.save();
   return wa.sendTextMessage(phone,
-    `👋 Welcome to *PrintMart*!\n\nReply *REGISTER* to create a new account.`
+    `👋 Welcome to *PrintMart*!\n\n` +
+    `📩 *INQUIRE* – Send an inquiry without registering\n` +
+    `📝 *REGISTER* – Create a free account\n\n` +
+    `Reply with a command to get started.`
   );
 };
 
@@ -677,6 +771,21 @@ const webhookReceive = async (req, res) => {
                 `⚠️ Change your password after login via Profile settings.`
               );
 
+            // SELLER — buyer requesting upgrade to seller
+            } else if (upperText === 'SELLER' && user?.role === 'buyer') {
+              session.state = 'upgrade_seller_confirm';
+              await session.save();
+              await wa.sendTextMessage(from,
+                `🏪 *Become a Seller on PrintMart*\n\n` +
+                `As a seller you can:\n` +
+                `✅ List your products & services\n` +
+                `✅ Receive buyer inquiries\n` +
+                `✅ Send quotations & manage orders\n` +
+                `✅ Get WhatsApp lead notifications\n\n` +
+                `Reply *YES* to upgrade your account to Seller.\n` +
+                `Reply *NO* to cancel.`
+              );
+
             // BUYER — seller requesting buyer mode
             } else if (upperText === 'BUYER' && user?.role === 'seller') {
               await wa.sendTextMessage(from,
@@ -695,7 +804,7 @@ const webhookReceive = async (req, res) => {
             } else if (user.role === 'seller' || user.role === 'admin') {
               await handleSellerMessage(from, user, text, interactiveId);
             } else {
-              await handleBuyerMessage(from, user, text, interactiveId);
+              await handleBuyerMessage(from, user, text, interactiveId, session);
             }
           } catch (handlerErr) {
             console.error(`[WA-Bot] Handler error for ${from}:`, handlerErr.message);

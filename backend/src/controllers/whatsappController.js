@@ -417,8 +417,9 @@ const handleSellerMessage = async (phone, user, text, interactiveId) => {
 
 const generateTempPassword = () => String(Math.floor(1000000 + Math.random() * 9000000)); // 7 digits
 
-const handleUnknownUser = async (phone, text, session) => {
-  const cmd = text?.trim().toUpperCase();
+const handleUnknownUser = async (phone, text, session, interactiveId) => {
+  // Resolve command from text first, then fall back to button payload
+  const cmd = (text?.trim() || interactiveId?.trim() || '').toUpperCase();
   const state = session?.state || 'idle';
   const ctx = session?.context || {};
 
@@ -656,11 +657,16 @@ const webhookReceive = async (req, res) => {
         } else if (msgType === 'interactive') {
           const iType = msg.interactive?.type;
           if (iType === 'button_reply') {
+            // Interactive message quick-reply buttons
             interactiveId = msg.interactive.button_reply?.id || '';
             text = msg.interactive.button_reply?.title || '';
           } else if (iType === 'list_reply') {
             interactiveId = msg.interactive.list_reply?.id || '';
             text = msg.interactive.list_reply?.title || '';
+          } else if (iType === 'button') {
+            // Template quick-reply button clicks use a different format
+            interactiveId = msg.interactive.button?.payload || '';
+            text = msg.interactive.button?.text || '';
           }
         }
 
@@ -781,7 +787,7 @@ const webhookReceive = async (req, res) => {
               );
 
             } else if (!user || session.state?.startsWith('reg_')) {
-              await handleUnknownUser(from, text, session);
+              await handleUnknownUser(from, text, session, interactiveId);
             } else if (user.role === 'seller' || user.role === 'admin') {
               await handleSellerMessage(from, user, text, interactiveId);
             } else {

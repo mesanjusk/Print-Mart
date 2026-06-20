@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import QRCode from 'react-qr-code';
 
 const WA_NUMBER = import.meta.env.VITE_WA_BUSINESS_NUMBER || '919370195000';
 const WA_LINK = `https://wa.me/${WA_NUMBER}?text=RESET`;
@@ -29,6 +30,13 @@ export default function ForgotPasswordPage() {
             </p>
           </div>
 
+          {/* QR — desktop only */}
+          <div className="hidden sm:flex justify-center">
+            <div className="bg-white p-3 rounded-lg shadow-sm inline-block border border-green-100">
+              <QRCode value={WA_LINK} size={140} />
+            </div>
+          </div>
+
           <a
             href={WA_LINK}
             target="_blank"
@@ -43,10 +51,9 @@ export default function ForgotPasswordPage() {
 
           <div className="bg-gray-50 rounded-lg px-4 py-3 text-left space-y-1.5 text-xs text-gray-500">
             <p className="font-medium text-gray-600">How it works:</p>
-            <p>1. Tap the button above to open WhatsApp</p>
-            <p>2. Send <strong>RESET</strong> in the chat</p>
-            <p>3. Follow the steps — you'll get a new temporary password</p>
-            <p>4. Login and change your password from profile settings</p>
+            <p>1. Scan QR or tap the button above — <strong>or</strong> manually send <strong>RESET</strong> to <strong>+91 93701 95000</strong> on WhatsApp</p>
+            <p>2. You'll instantly receive a new temporary password</p>
+            <p>3. Login and change your password from profile settings</p>
           </div>
 
           <Link to="/login" className="block text-sm text-green-600 hover:text-green-700 font-medium">

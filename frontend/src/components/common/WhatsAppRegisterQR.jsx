@@ -51,7 +51,7 @@ export default function WhatsAppRegisterQR({ compact = false }) {
       <div className="mt-4 bg-white rounded-lg px-4 py-3 text-left space-y-1 border border-green-100">
         <p className="text-xs font-medium text-gray-700">How it works:</p>
         <p className="text-xs text-gray-500">1. Scan QR or tap the button above</p>
-        <p className="text-xs text-gray-500">2. Send <strong>REGISTER</strong> in the chat</p>
+        <p className="text-xs text-gray-500">2. Send <strong>REGISTER</strong> to <strong>+91 93701 95000</strong></p>
         <p className="text-xs text-gray-500">3. Choose Buyer or Seller → enter name → enter email</p>
         <p className="text-xs text-gray-500">4. Get your login link + temp password instantly</p>
       </div>

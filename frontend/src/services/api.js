@@ -150,4 +150,13 @@ export const offerAPI = {
   remove: (id) => api.delete(`/offers/${id}`),
 };
 
+export const bulkAPI = {
+  getCategories: () => api.get('/admin/bulk/catalog'),
+  importCategories: (data) => api.post('/admin/bulk/categories', data),
+  importProducts: (data) => api.post('/admin/bulk/products', data),
+  importSellers: (data) => api.post('/admin/bulk/sellers', data),
+  confirmSellerOTP: (email, otp) => api.post('/admin/bulk/sellers/confirm-otp', { email, otp }),
+  addSeller: (data) => api.post('/admin/bulk/seller', data),
+};
+
 export default api;

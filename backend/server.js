@@ -57,15 +57,36 @@ app.get('/', (req, res) => {
   res.json({ message: 'PrintMart API is running', status: 'ok' });
 });
 
+// One-time campaign seed
+app.post('/api/seed-campaign', async (req, res) => {
+  try {
+    const WhatsAppCampaign = require('./src/models/WhatsAppCampaign');
+    const { keyword = 'hi', reply = 'test', name = 'Hi Auto-Reply' } = req.body;
+    const existing = await WhatsAppCampaign.findOne({ name });
+    if (existing) return res.json({ message: 'Campaign already exists', campaign: existing });
+    const campaign = await WhatsAppCampaign.create({
+      name,
+      type: 'auto_reply',
+      status: 'active',
+      trigger: { keywords: [keyword.toLowerCase()], matchType: 'exact', roles: ['any'] },
+      response: { messageType: 'text', content: reply },
+      respectOptOut: true,
+    });
+    res.json({ message: 'Campaign created', campaign });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // One-time admin bootstrap
 // If no admin exists yet → allowed without secret (first-run mode)
 // If admin already exists → requires ADMIN_SEED_SECRET env var
 app.get('/api/seed-admin/status', async (req, res) => {
   try {
     const User = require('./src/models/User');
-    const adminExists = await User.exists({ role: 'admin' });
+    const superadminExists = await User.exists({ role: 'superadmin' });
     res.json({
-      adminExists: !!adminExists,
+      adminExists: !!superadminExists,
       secretConfigured: !!process.env.ADMIN_SEED_SECRET,
     });
   } catch (err) {
@@ -78,29 +99,28 @@ app.post('/api/seed-admin', async (req, res) => {
   try {
     const User = require('./src/models/User');
     const generateToken = require('./src/utils/generateToken');
-    const adminExists = await User.exists({ role: 'admin' });
+    const superadminExists = await User.exists({ role: 'superadmin' });
 
-    if (adminExists) {
-      // Admins already exist — require secret
+    if (superadminExists) {
       const SEED_SECRET = process.env.ADMIN_SEED_SECRET;
       if (!SEED_SECRET || secret !== SEED_SECRET) {
-        return res.status(403).json({ message: 'An admin account already exists. Provide the correct ADMIN_SEED_SECRET to create another.' });
+        return res.status(403).json({ message: 'A superadmin already exists. Provide the correct ADMIN_SEED_SECRET.' });
       }
     }
-    // First-run: no admin exists → allow without secret
 
     let user = await User.findOne({ email });
     if (user) {
-      user.role = 'admin';
+      user.role = 'superadmin';
+      user.isVerified = true;
       await user.save();
-      return res.json({ message: 'Existing user promoted to admin', email: user.email, role: user.role });
+      return res.json({ message: 'Existing user promoted to superadmin', email: user.email, role: user.role });
     }
     if (!password || password.length < 6) {
       return res.status(400).json({ message: 'Password must be at least 6 characters' });
     }
-    user = await User.create({ name: name || 'Super Admin', email, password, phone, role: 'admin' });
+    user = await User.create({ name: name || 'Super Admin', email, password, phone, role: 'superadmin', isVerified: true });
     res.status(201).json({
-      message: 'Admin created successfully',
+      message: 'Superadmin created successfully',
       email: user.email,
       role: user.role,
       token: generateToken(user._id),

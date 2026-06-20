@@ -6,7 +6,7 @@ const userSchema = new mongoose.Schema({
   email: { type: String, required: true, unique: true, lowercase: true },
   password: { type: String, required: true, minlength: 6 },
   phone: { type: String },
-  role: { type: String, enum: ['buyer', 'seller', 'admin'], default: 'buyer' },
+  role: { type: String, enum: ['buyer', 'seller', 'admin', 'superadmin'], default: 'buyer' },
   avatar: { type: String, default: '' },
   isVerified: { type: Boolean, default: false },
   isActive: { type: Boolean, default: true },
@@ -23,6 +23,8 @@ const userSchema = new mongoose.Schema({
   // Seller plan: only 'premium' sellers receive lead broadcasts
   plan: { type: String, enum: ['free', 'premium'], default: 'free' },
   planActivatedAt: { type: Date },
+  // Sellers can also act as buyers (browse + inquire on other sellers' products)
+  canBuyAlso: { type: Boolean, default: true },
   lastSeenAt: { type: Date },
   morningDigestOptIn: { type: Boolean, default: false },
   // PWA push notification subscription
@@ -34,6 +36,13 @@ const userSchema = new mongoose.Schema({
     },
   },
   pushEnabled: { type: Boolean, default: false },
+  emailVerifyToken: { type: String },
+  emailVerifyExpire: { type: Date },
+  resetPasswordToken: { type: String },
+  resetPasswordExpire: { type: Date },
+  otpCode: { type: String },
+  otpPurpose: { type: String, enum: ['verify_email', 'reset_password'] },
+  otpExpire: { type: Date },
 }, { timestamps: true });
 
 userSchema.pre('save', async function (next) {

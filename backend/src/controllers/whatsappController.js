@@ -37,6 +37,7 @@ const getOrCreateSession = async (phone, user) => {
     session.role = user.role;
   }
   session.lastActivity = new Date();
+  // Track 24h customer service window — updated only on inbound
   return session;
 };
 
@@ -74,8 +75,35 @@ const parseCommand = (text) => {
 
 // ─── Buyer flows ─────────────────────────────────────────────────────────────
 
-const handleBuyerMessage = async (phone, user, text, interactiveId) => {
+const handleBuyerMessage = async (phone, user, text, interactiveId, session) => {
   const cmd = interactiveId ? { cmd: interactiveId.toUpperCase() } : parseCommand(text);
+  const upperText = text?.trim().toUpperCase();
+
+  // Seller upgrade confirmation
+  if (session?.state === 'upgrade_seller_confirm') {
+    if (upperText === 'YES') {
+      user.role = 'seller';
+      await user.save();
+      session.state = 'idle';
+      session.role = 'seller';
+      await session.save();
+      return wa.sendTextMessage(phone,
+        `🎉 *Account Upgraded to Seller!*\n\n` +
+        `Welcome to the PrintMart seller community, *${user.name}*!\n\n` +
+        `Next steps:\n` +
+        `1. Login to your account\n` +
+        `2. Complete your business profile\n` +
+        `3. Add your products/services\n\n` +
+        `🔗 ${process.env.CLIENT_URL || 'https://app.instify.in'}/login\n\n` +
+        `Reply *MENU* to see your new seller commands.`,
+        user._id
+      );
+    } else {
+      session.state = 'idle';
+      await session.save();
+      return wa.sendTextMessage(phone, `No problem! You remain a buyer. Reply *MENU* anytime.`, user._id);
+    }
+  }
 
   if (cmd.cmd === 'MENU') {
     return wa.sendWelcomeBuyer(phone, user.name, user._id);
@@ -385,14 +413,213 @@ const handleSellerMessage = async (phone, user, text, interactiveId) => {
 
 // ─── Unknown user flow ────────────────────────────────────────────────────────
 
-const handleUnknownUser = async (phone, text) => {
-  const body =
+// ─── WhatsApp Registration Flow ──────────────────────────────────────────────
+
+const generateTempPassword = () => String(Math.floor(1000000 + Math.random() * 9000000)); // 7 digits
+
+const handleUnknownUser = async (phone, text, session) => {
+  const cmd = text?.trim().toUpperCase();
+  const state = session?.state || 'idle';
+  const ctx = session?.context || {};
+
+  // Entry points
+  if (state === 'idle' || !state.startsWith('reg_')) {
+    // Guest inquiry — no registration needed
+    if (['INQUIRE', 'INQUIRY', 'ENQUIRE', 'ENQUIRY', 'QUOTE', 'PRICE'].includes(cmd)) {
+      session.state = 'guest_inquiry';
+      session.context = {};
+      await session.save();
+      return wa.sendTextMessage(phone,
+        `📩 *Send an Inquiry – No Registration Needed!*\n\n` +
+        `Just tell us what you're looking for:\n\n` +
+        `Type your message in this format:\n` +
+        `*Product name | Quantity | Your name*\n\n` +
+        `Example:\n` +
+        `_Business Cards | 500 pcs | Rahul_\n\n` +
+        `We'll forward your inquiry to relevant sellers and they'll contact you here on WhatsApp! 📱\n\n` +
+        `💡 Register for free to track all your inquiries: reply *REGISTER*`
+      );
+    }
+
+    if (['REGISTER', 'JOIN', 'SIGNUP', 'NEW ACCOUNT', 'START'].includes(cmd)) {
+      session.state = 'reg_role';
+      session.context = {};
+      await session.save();
+      return wa.sendTextMessage(phone,
+        `👋 Welcome to *PrintMart*!\n\n` +
+        `Register as:\n` +
+        `1️⃣ *BUYER* – Browse & purchase products\n` +
+        `2️⃣ *SELLER* – List & sell your products\n\n` +
+        `Reply *1* or *BUYER* / *2* or *SELLER*`
+      );
+    }
+    // Default unknown user message
+    return wa.sendTextMessage(phone,
+      `👋 Welcome to *PrintMart*!\n\n` +
+      `You don't have an account yet.\n\n` +
+      `📝 To register, reply *REGISTER*\n` +
+      `🌐 Or sign up at: ${process.env.CLIENT_URL || 'https://print-mart.vercel.app'}/register`
+    );
+  }
+
+  // Step 1: choose role
+  if (state === 'reg_role') {
+    let role = null;
+    if (['1', 'BUYER'].includes(cmd)) role = 'buyer';
+    if (['2', 'SELLER'].includes(cmd)) role = 'seller';
+    if (!role) {
+      return wa.sendTextMessage(phone, `Please reply *1* for Buyer or *2* for Seller.`);
+    }
+    session.state = 'reg_name';
+    session.context = { role };
+    await session.save();
+    return wa.sendTextMessage(phone, `Great! You chose *${role.toUpperCase()}*.\n\nPlease enter your *full name*:`);
+  }
+
+  // Step 2: name
+  if (state === 'reg_name') {
+    const name = text?.trim();
+    if (!name || name.length < 2) {
+      return wa.sendTextMessage(phone, `Please enter a valid full name (at least 2 characters).`);
+    }
+    session.state = 'reg_email';
+    session.context = { ...ctx, name };
+    await session.save();
+    return wa.sendTextMessage(phone, `Nice to meet you, *${name}*! 😊\n\nPlease enter your *email address*:`);
+  }
+
+  // Step 3: email
+  if (state === 'reg_email') {
+    const email = text?.trim().toLowerCase();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return wa.sendTextMessage(phone, `❌ That doesn't look like a valid email.\n\nPlease enter a valid *email address*:`);
+    }
+
+    // Check if email already exists
+    const existing = await User.findOne({ email });
+    if (existing) {
+      session.state = 'idle';
+      session.context = {};
+      await session.save();
+      return wa.sendTextMessage(phone,
+        `⚠️ This email is already registered.\n\n` +
+        `🔑 Login at: ${process.env.CLIENT_URL || 'https://print-mart.vercel.app'}/login\n\n` +
+        `Forgot password? Reply *RESET*`
+      );
+    }
+
+    // Create account
+    const tempPassword = generateTempPassword();
+    const { name, role } = ctx;
+
+    try {
+      const user = await User.create({
+        name,
+        email,
+        password: tempPassword,
+        phone: `+${phone}`,
+        role,
+        isVerified: true, // WhatsApp verified
+      });
+
+      session.userId = user._id;
+      session.role = role;
+      session.state = 'idle';
+      session.context = {};
+      await session.save();
+
+      const loginUrl = `${process.env.CLIENT_URL || 'https://print-mart.vercel.app'}/login`;
+
+      await wa.sendTextMessage(phone,
+        `✅ *Account Created Successfully!*\n\n` +
+        `📋 *Your Login Details:*\n` +
+        `👤 Name: ${name}\n` +
+        `📧 Email: ${email}\n` +
+        `🔑 Temp Password: *${tempPassword}*\n\n` +
+        `🔗 Login here: ${loginUrl}\n\n` +
+        `⚠️ *Important:* Please change your password after first login.\n\n` +
+        `After login, complete your profile to activate your full account.`
+      );
+
+      console.log(`[WA-Register] New ${role} account created: ${email} (${name}) from ${phone}`);
+    } catch (err) {
+      console.error('[WA-Register] Error creating account:', err.message);
+      session.state = 'idle';
+      session.context = {};
+      await session.save();
+      return wa.sendTextMessage(phone, `❌ Something went wrong. Please try again or register at our website.`);
+    }
+    return;
+  }
+
+  // Guest inquiry submission
+  if (state === 'guest_inquiry') {
+    const parts = text.split('|').map((s) => s.trim());
+    const productName = parts[0];
+    const quantity = parts[1] || 'Not specified';
+    const guestName = parts[2] || 'Guest';
+
+    if (!productName || productName.length < 2) {
+      return wa.sendTextMessage(phone,
+        `Please use the format:\n*Product | Quantity | Your name*\n\nExample:\n_Business Cards | 500 pcs | Rahul_`
+      );
+    }
+
+    // Save as a guest inquiry in WhatsApp log (no DB Inquiry record — no registered user)
+    await wa.logMessage({
+      direction: 'inbound',
+      phone,
+      messageType: 'text',
+      message: `[GUEST INQUIRY] ${text}`,
+    });
+
+    session.state = 'idle';
+    session.context = {};
+    await session.save();
+
+    // Notify admin via WhatsApp
+    const adminPhone = process.env.ADMIN_WHATSAPP_PHONE;
+    if (adminPhone) {
+      await wa.sendTextMessage(adminPhone,
+        `📩 *New Guest Inquiry*\n\n` +
+        `📱 From: +${phone}\n` +
+        `👤 Name: ${guestName}\n` +
+        `📦 Product: ${productName}\n` +
+        `📊 Quantity: ${quantity}\n\n` +
+        `Reply directly to this number on WhatsApp to follow up.`
+      ).catch(() => {});
+    }
+
+    return wa.sendTextMessage(phone,
+      `✅ *Inquiry Received!*\n\n` +
+      `*Product:* ${productName}\n` +
+      `*Quantity:* ${quantity}\n\n` +
+      `Our team will connect you with the right sellers shortly. They'll message you here on WhatsApp.\n\n` +
+      `📝 Register for free to track your inquiries:\nReply *REGISTER*`
+    );
+  }
+
+  // Reset flow
+  if (cmd === 'RESET') {
+    session.state = 'idle';
+    session.context = {};
+    await session.save();
+    return wa.sendTextMessage(phone,
+      `To reset your password, visit:\n${process.env.CLIENT_URL || 'https://app.instify.in'}/forgot-password`
+    );
+  }
+
+  // Fallback
+  session.state = 'idle';
+  session.context = {};
+  await session.save();
+  return wa.sendTextMessage(phone,
     `👋 Welcome to *PrintMart*!\n\n` +
-    `We couldn't find your phone number in our system.\n\n` +
-    `Please register at our website to start using WhatsApp services:\n` +
-    `🌐 printmart.in\n\n` +
-    `Once registered, reply *MENU* to get started.`;
-  return wa.sendTextMessage(phone, body);
+    `📩 *INQUIRE* – Send an inquiry without registering\n` +
+    `📝 *REGISTER* – Create a free account\n\n` +
+    `Reply with a command to get started.`
+  );
 };
 
 // ─── Helper: find quotation ───────────────────────────────────────────────────
@@ -466,18 +693,123 @@ const webhookReceive = async (req, res) => {
         const phoneVariants = [from, `+${from}`];
         const user = await User.findOne({ phone: { $in: phoneVariants } });
         const session = await getOrCreateSession(from, user);
+        // Update 24h customer service window timestamp on every inbound message
+        session.lastInboundAt = new Date();
 
-        try {
-          if (!user) {
-            await handleUnknownUser(from, text);
-          } else if (user.role === 'seller' || user.role === 'admin') {
-            await handleSellerMessage(from, user, text, interactiveId);
-          } else {
-            await handleBuyerMessage(from, user, text, interactiveId);
+        // Check active auto-reply campaigns before normal handler
+        let handledByAutoReply = false;
+        if (text) {
+          try {
+            const WhatsAppCampaign = require('../models/WhatsAppCampaign');
+            const WhatsAppOptOut = require('../models/WhatsAppOptOut');
+            const isOptedOut = await WhatsAppOptOut.findOne({ phone: from });
+            if (!isOptedOut) {
+              const campaigns = await WhatsAppCampaign.find({ type: 'auto_reply', status: 'active' });
+              const lowerText = text.toLowerCase().trim();
+              for (const camp of campaigns) {
+                const userRole = user?.role || 'unknown';
+                const rolesMatch = !camp.trigger.roles?.length ||
+                  camp.trigger.roles.includes('any') || camp.trigger.roles.includes(userRole);
+                if (!rolesMatch) continue;
+                const match = camp.trigger.keywords?.some((kw) => {
+                  if (camp.trigger.matchType === 'exact') return lowerText === kw;
+                  if (camp.trigger.matchType === 'starts_with') return lowerText.startsWith(kw);
+                  return lowerText.includes(kw); // contains
+                });
+                if (match) {
+                  if (camp.response.messageType === 'template' && camp.response.templateName) {
+                    const components = camp.response.templateParams?.length
+                      ? [{ type: 'body', parameters: camp.response.templateParams.map((t) => ({ type: 'text', text: t })) }] : [];
+                    await wa.sendTemplateMessage(from, camp.response.templateName, camp.response.templateLanguage || 'en', components);
+                  } else {
+                    await wa.sendTextMessage(from, camp.response.content);
+                  }
+                  camp.stats.sent = (camp.stats.sent || 0) + 1;
+                  await camp.save();
+                  handledByAutoReply = true;
+                  break;
+                }
+              }
+            }
+          } catch (arErr) {
+            console.error('[WA-Bot] Auto-reply check error:', arErr.message);
           }
-        } catch (handlerErr) {
-          console.error(`[WA-Bot] Handler error for ${from}:`, handlerErr.message);
-          await wa.sendTextMessage(from, `Sorry, something went wrong. Please try again or reply *MENU*.`);
+        }
+
+        if (!handledByAutoReply) {
+          try {
+            const upperText = text?.trim().toUpperCase();
+            const generateTempPwd = () => String(Math.floor(1000000 + Math.random() * 9000000));
+            const loginUrl = process.env.CLIENT_URL || 'https://app.instify.in';
+
+            // REGISTER — already registered: reset & send temp password
+            if (['REGISTER', 'JOIN', 'SIGNUP', 'NEW ACCOUNT', 'START'].includes(upperText) && user) {
+              const tempPassword = generateTempPwd();
+              user.password = tempPassword;
+              await user.save();
+              await wa.sendTextMessage(from,
+                `👋 Welcome back, *${user.name}*!\n\n` +
+                `You already have a PrintMart account.\n\n` +
+                `📧 Email: ${user.email}\n` +
+                `👤 Role: ${user.role}\n` +
+                `🔑 Temp Password: *${tempPassword}*\n\n` +
+                `🔗 Login: ${loginUrl}/login\n\n` +
+                `⚠️ Change your password after login.\n` +
+                `Reply *MENU* after logging in.`
+              );
+
+            // RESET — password reset for existing users
+            } else if (upperText === 'RESET' && user) {
+              const tempPassword = generateTempPwd();
+              user.password = tempPassword;
+              await user.save();
+              await wa.sendTextMessage(from,
+                `🔑 *Password Reset*\n\n` +
+                `Your new temporary password:\n\n` +
+                `*${tempPassword}*\n\n` +
+                `🔗 Login: ${loginUrl}/login\n\n` +
+                `⚠️ Change your password after login via Profile settings.`
+              );
+
+            // SELLER — buyer requesting upgrade to seller
+            } else if (upperText === 'SELLER' && user?.role === 'buyer') {
+              session.state = 'upgrade_seller_confirm';
+              await session.save();
+              await wa.sendTextMessage(from,
+                `🏪 *Become a Seller on PrintMart*\n\n` +
+                `As a seller you can:\n` +
+                `✅ List your products & services\n` +
+                `✅ Receive buyer inquiries\n` +
+                `✅ Send quotations & manage orders\n` +
+                `✅ Get WhatsApp lead notifications\n\n` +
+                `Reply *YES* to upgrade your account to Seller.\n` +
+                `Reply *NO* to cancel.`
+              );
+
+            // BUYER — seller requesting buyer mode
+            } else if (upperText === 'BUYER' && user?.role === 'seller') {
+              await wa.sendTextMessage(from,
+                `🛒 *Buyer Mode*\n\n` +
+                `As a seller on PrintMart, you can also browse and inquire about products as a buyer.\n\n` +
+                `Visit the app to:\n` +
+                `• Browse products\n` +
+                `• Send inquiries to other sellers\n` +
+                `• Compare prices\n\n` +
+                `🔗 ${loginUrl}/products\n\n` +
+                `Your seller dashboard remains active. Reply *MENU* for seller commands.`
+              );
+
+            } else if (!user || session.state?.startsWith('reg_')) {
+              await handleUnknownUser(from, text, session);
+            } else if (user.role === 'seller' || user.role === 'admin') {
+              await handleSellerMessage(from, user, text, interactiveId);
+            } else {
+              await handleBuyerMessage(from, user, text, interactiveId, session);
+            }
+          } catch (handlerErr) {
+            console.error(`[WA-Bot] Handler error for ${from}:`, handlerErr.message);
+            await wa.sendTextMessage(from, `Sorry, something went wrong. Please try again or reply *MENU*.`);
+          }
         }
 
         session.lastActivity = new Date();

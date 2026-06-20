@@ -19,37 +19,37 @@ export default function Navbar() {
   };
 
   return (
-    <header className="bg-white shadow-sm sticky top-0 z-50">
-      <div className="bg-green-700 text-white text-xs text-center py-1 px-4">
+    <header className="bg-white shadow-sm sticky top-0 z-50 w-full">
+      <div className="bg-green-700 text-white text-xs text-center py-1 px-4 truncate">
         India's #1 Printing &amp; Customization Marketplace
       </div>
-      <div className="max-w-7xl mx-auto px-4 py-3">
-        <div className="flex items-center gap-4">
+      <div className="max-w-7xl mx-auto px-3 py-3">
+        <div className="flex items-center gap-2 min-w-0">
           <Link to="/" className="flex-shrink-0">
             <div className="flex items-center gap-1">
-              <div className="w-8 h-8 bg-green-600 rounded-full flex items-center justify-center">
+              <div className="w-8 h-8 bg-green-600 rounded-full flex items-center justify-center flex-shrink-0">
                 <span className="text-white font-bold text-sm">PM</span>
               </div>
-              <span className="text-xl font-bold text-gray-800">PrintMart</span>
+              <span className="text-lg font-bold text-gray-800 hidden sm:block">PrintMart</span>
             </div>
           </Link>
 
-          <form onSubmit={handleSearch} className="flex-grow max-w-2xl">
+          <form onSubmit={handleSearch} className="flex-1 min-w-0">
             <div className="flex border-2 border-green-500 rounded overflow-hidden">
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search business cards, banners, brochures..."
-                className="flex-grow px-4 py-2 text-sm outline-none"
+                placeholder="Search products..."
+                className="flex-1 min-w-0 px-3 py-2 text-sm outline-none"
               />
-              <button type="submit" className="bg-green-600 px-4 py-2 text-white hover:bg-green-700">
-                <FiSearch size={18} />
+              <button type="submit" className="bg-green-600 px-3 py-2 text-white hover:bg-green-700 flex-shrink-0">
+                <FiSearch size={16} />
               </button>
             </div>
           </form>
 
-          <nav className="hidden md:flex items-center gap-4 text-sm">
+          <nav className="hidden md:flex items-center gap-4 text-sm flex-shrink-0">
             <Link to="/products" className="text-gray-600 hover:text-green-600 font-medium">Products</Link>
             <Link to="/offers" className="text-orange-600 hover:text-orange-700 font-medium">🔥 Offers</Link>
             <Link to="/compare" className="text-gray-600 hover:text-green-600 font-medium">Compare</Link>

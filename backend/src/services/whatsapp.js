@@ -92,6 +92,66 @@ const sendListMessage = async (to, bodyText, buttonLabel, sections, userId) => {
   return result;
 };
 
+// ─── Template Messages (Meta pre-approved required for business-initiated) ───
+
+const sendTemplateMessage = async (to, templateName, languageCode, components, userId) => {
+  const payload = {
+    type: 'template',
+    template: {
+      name: templateName,
+      language: { code: languageCode || 'en' },
+      ...(components?.length ? { components } : {}),
+    },
+  };
+  const result = await sendRaw(to, payload);
+  await logMessage({
+    direction: 'outbound',
+    phone: normalisePhone(to),
+    userId,
+    messageType: 'template',
+    message: templateName,
+    metadata: { templateName, components },
+    waMessageId: result?.messages?.[0]?.id,
+  });
+  return result;
+};
+
+// Requires Meta-approved AUTHENTICATION template: printmart_account_verification
+// Template body: "{{1}} is your PrintMart verification code. Valid for 10 minutes. Do not share this code."
+const sendVerificationOTP = async (phone, otp, userId) => {
+  if (!phone) return null;
+  return sendTemplateMessage(phone, 'printmart_account_verification', 'en', [
+    {
+      type: 'body',
+      parameters: [{ type: 'text', text: otp }],
+    },
+    {
+      type: 'button',
+      sub_type: 'url',
+      index: '0',
+      parameters: [{ type: 'text', text: otp }],
+    },
+  ], userId);
+};
+
+// Requires Meta-approved AUTHENTICATION template: printmart_password_reset
+// Template body: "{{1}} is your PrintMart password reset code. Valid for 10 minutes. Do not share this code."
+const sendPasswordResetOTP = async (phone, otp, userId) => {
+  if (!phone) return null;
+  return sendTemplateMessage(phone, 'printmart_password_reset', 'en', [
+    {
+      type: 'body',
+      parameters: [{ type: 'text', text: otp }],
+    },
+    {
+      type: 'button',
+      sub_type: 'url',
+      index: '0',
+      parameters: [{ type: 'text', text: otp }],
+    },
+  ], userId);
+};
+
 // ─── Business Notification Messages ─────────────────────────────────────────
 
 const sendWelcomeBuyer = async (phone, name, userId) => {
@@ -133,7 +193,9 @@ const sendHelpBuyer = async (phone, userId) => {
     `  e.g.  PAID PM-2024-0001\n` +
     `*TRACK [order-number]* – Get tracking info\n` +
     `  e.g.  TRACK PM-2024-0001\n` +
-    `*CANCEL [order-number]* – Cancel order\n\n` +
+    `*CANCEL [order-number]* – Cancel order\n` +
+    `*SELLER* – Upgrade account to Seller\n` +
+    `*RESET* – Get a new temporary password\n\n` +
     `Or just type a message to reply to your latest inquiry.`;
   return sendTextMessage(phone, body, userId);
 };
@@ -150,7 +212,9 @@ const sendHelpSeller = async (phone, userId) => {
     `  e.g.  DISPATCH PM-2024-0001 DTDC-TRK789\n` +
     `*DELIVER [order]* – Mark as delivered\n` +
     `  e.g.  DELIVER PM-2024-0001\n` +
-    `*ORDERS* – Active orders summary\n\n` +
+    `*ORDERS* – Active orders summary\n` +
+    `*BUYER* – Info on browsing & buying as a seller\n` +
+    `*RESET* – Get a new temporary password\n\n` +
     `Or just reply to this chat to respond to an inquiry.`;
   return sendTextMessage(phone, body, userId);
 };
@@ -348,16 +412,21 @@ const sendMorningDigest = async (sellerPhone, sellerName, pendingCount, offerCou
   return sendTextMessage(sellerPhone, body);
 };
 const verifyWebhook = (mode, token, challenge) => {
-  if (!VERIFY_TOKEN) {
+  const verifyToken = process.env.WHATSAPP_VERIFY_TOKEN;
+  console.log('[WA-Webhook] mode:', mode, '| received token:', token, '| expected:', verifyToken);
+  if (!verifyToken) {
     console.warn('[WhatsApp] WHATSAPP_VERIFY_TOKEN not set.');
     return null;
   }
-  if (mode === 'subscribe' && token === VERIFY_TOKEN) return challenge;
+  if (mode === 'subscribe' && token === verifyToken) return challenge;
   return null;
 };
 
 module.exports = {
   normalisePhone,
+  sendTemplateMessage,
+  sendVerificationOTP,
+  sendPasswordResetOTP,
   sendTextMessage,
   sendButtonMessage,
   sendListMessage,

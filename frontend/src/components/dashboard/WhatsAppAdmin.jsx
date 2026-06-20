@@ -1,523 +1,1086 @@
-import { useState, useEffect, useCallback } from 'react';
-import { waAdminAPI } from '../../services/api';
-import toast from 'react-hot-toast';
-import Spinner from '../common/Spinner';
+import { useState, useEffect, useCallback, useRef } from "react";
+import { waAdminAPI } from "../../services/api";
+import toast from "react-hot-toast";
+import Spinner from "../common/Spinner";
 import {
   FiMessageSquare, FiSend, FiUsers, FiActivity, FiSettings,
-  FiCheckCircle, FiXCircle, FiPhone, FiChevronDown, FiChevronUp,
-  FiRefreshCw, FiRadio
-} from 'react-icons/fi';
+  FiCheckCircle, FiXCircle, FiPhone, FiRefreshCw, FiRadio,
+  FiClock, FiZap, FiTrash2, FiPlay, FiPause, FiPlus, FiEdit2,
+  FiChevronDown, FiChevronUp, FiAlertCircle, FiBell
+} from "react-icons/fi";
 
-const TabButton = ({ active, onClick, children }) => (
-  <button
-    onClick={onClick}
-    className={`px-4 py-2 text-sm font-medium rounded-t-lg border-b-2 transition-colors ${
-      active ? 'border-green-600 text-green-700 bg-green-50' : 'border-transparent text-gray-500 hover:text-gray-700'
-    }`}
-  >
-    {children}
-  </button>
-);
+// ─── Helpers ────────────────────────────────────────────────────────────────
 
-const StatCard = ({ label, value, sub, color = 'green', icon }) => (
-  <div className="card p-4 flex items-center gap-4">
-    <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
-      color === 'green' ? 'bg-green-100 text-green-600' :
-      color === 'blue' ? 'bg-blue-100 text-blue-600' :
-      color === 'purple' ? 'bg-purple-100 text-purple-600' :
-      'bg-orange-100 text-orange-600'
-    }`}>
-      {icon}
+const fmt = (n) => (n ?? 0).toLocaleString();
+const fmtTime = (iso) => iso ? new Date(iso).toLocaleString() : "—";
+const minutesUntil = (iso) => iso ? Math.max(0, Math.round((new Date(iso) - Date.now()) / 60000)) : null;
+
+function StatusBadge({ active, labels = ["Active", "Inactive"] }) {
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${active ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
+      {active ? <FiCheckCircle size={11} /> : <FiXCircle size={11} />}
+      {active ? labels[0] : labels[1]}
+    </span>
+  );
+}
+
+function DirectionBadge({ direction }) {
+  const inbound = direction === "inbound";
+  return (
+    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${inbound ? "bg-blue-100 text-blue-700" : "bg-green-100 text-green-700"}`}>
+      {inbound ? "In" : "Out"}
+    </span>
+  );
+}
+
+function StatCard({ label, value, icon: Icon, color = "blue" }) {
+  const colors = {
+    blue: "bg-blue-50 text-blue-600",
+    green: "bg-green-50 text-green-600",
+    amber: "bg-amber-50 text-amber-600",
+    red: "bg-red-50 text-red-600",
+    purple: "bg-purple-50 text-purple-600",
+  };
+  return (
+    <div className="card flex items-center gap-4 p-4">
+      <div className={`p-3 rounded-xl ${colors[color]}`}>
+        <Icon size={20} />
+      </div>
+      <div>
+        <p className="text-2xl font-bold text-gray-800">{fmt(value)}</p>
+        <p className="text-xs text-gray-500 mt-0.5">{label}</p>
+      </div>
     </div>
-    <div>
-      <p className="text-2xl font-bold text-gray-800">{value ?? '–'}</p>
-      <p className="text-xs text-gray-500">{label}</p>
-      {sub && <p className="text-xs text-gray-400">{sub}</p>}
-    </div>
-  </div>
-);
+  );
+}
 
-// ─── Stats Tab ────────────────────────────────────────────────────────────────
+// ─── Analytics Panel ─────────────────────────────────────────────────────────
+
 function StatsPanel() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    waAdminAPI.getStats().then((r) => { setStats(r.data); setLoading(false); }).catch(() => setLoading(false));
-  }, []);
-
-  if (loading) return <Spinner />;
-  if (!stats) return <p className="text-gray-500">Failed to load stats.</p>;
-
-  return (
-    <div className="space-y-6">
-      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label="Total Messages" value={stats.totalMessages} icon={<FiMessageSquare />} color="green" />
-        <StatCard label="Inbound" value={stats.inboundMessages} icon={<FiChevronDown />} color="blue" />
-        <StatCard label="Outbound" value={stats.outboundMessages} icon={<FiChevronUp />} color="purple" />
-        <StatCard label="Active Sessions (7d)" value={stats.activeSessionsLast7Days} icon={<FiUsers />} color="orange" />
-      </div>
-
-      <div className="grid sm:grid-cols-3 gap-4">
-        <StatCard label="Orders via WhatsApp" value={stats.ordersViaWhatsapp} sub={`of ${stats.totalOrders} total`} icon={<FiActivity />} color="green" />
-        <StatCard label="WA Conversion Rate" value={`${stats.waConversionRate}%`} icon={<FiCheckCircle />} color="blue" />
-        <div className="card p-4">
-          <h3 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2"><FiSettings /> Config Status</h3>
-          {Object.entries(stats.config || {}).map(([k, v]) => (
-            <div key={k} className="flex items-center gap-2 text-xs mb-1">
-              {typeof v === 'boolean'
-                ? v ? <FiCheckCircle className="text-green-500 flex-shrink-0" /> : <FiXCircle className="text-red-500 flex-shrink-0" />
-                : <FiCheckCircle className="text-blue-400 flex-shrink-0" />
-              }
-              <span className="text-gray-600">{k.replace(/([A-Z])/g, ' $1').trim()}: {typeof v === 'boolean' ? (v ? 'Yes' : 'No') : v}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {stats.dailyMessages?.length > 0 && (
-        <div className="card p-4">
-          <h3 className="text-sm font-semibold text-gray-700 mb-3">Messages per Day (Last 7 Days)</h3>
-          <div className="flex items-end gap-2 h-24">
-            {stats.dailyMessages.map((d) => {
-              const max = Math.max(...stats.dailyMessages.map((x) => x.count), 1);
-              return (
-                <div key={d._id} className="flex flex-col items-center flex-1">
-                  <div
-                    className="w-full bg-green-400 rounded-t"
-                    style={{ height: `${(d.count / max) * 80}px` }}
-                  />
-                  <span className="text-xs text-gray-400 mt-1 truncate">{d._id?.slice(5)}</span>
-                  <span className="text-xs font-medium">{d.count}</span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── Conversations Tab ────────────────────────────────────────────────────────
-function ConversationsPanel() {
-  const [conversations, setConversations] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [selected, setSelected] = useState(null);
-  const [messages, setMessages] = useState([]);
-  const [msgLoading, setMsgLoading] = useState(false);
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-
-  const loadConversations = useCallback((p = 1) => {
+  const load = useCallback(async () => {
     setLoading(true);
-    waAdminAPI.getConversations({ page: p, limit: 15 }).then((r) => {
-      setConversations(r.data.conversations || []);
-      setTotalPages(r.data.pages || 1);
+    try {
+      const res = await waAdminAPI.getStats();
+      setStats(res.data);
+    } catch {
+      toast.error("Failed to load stats");
+    } finally {
       setLoading(false);
-    }).catch(() => setLoading(false));
+    }
   }, []);
-
-  useEffect(() => { loadConversations(page); }, [page, loadConversations]);
-
-  const openConversation = (phone) => {
-    setSelected(phone);
-    setMsgLoading(true);
-    waAdminAPI.getConversationByPhone(phone, { limit: 50 }).then((r) => {
-      setMessages(r.data.messages || []);
-      setMsgLoading(false);
-    }).catch(() => setMsgLoading(false));
-  };
-
-  return (
-    <div className="flex gap-4 h-[600px]">
-      <div className="w-64 flex-shrink-0 overflow-y-auto border rounded-lg">
-        <div className="p-3 border-b bg-gray-50 flex items-center justify-between">
-          <span className="text-sm font-medium text-gray-700">Conversations</span>
-          <button onClick={() => loadConversations(1)} className="text-gray-400 hover:text-gray-600"><FiRefreshCw size={14} /></button>
-        </div>
-        {loading ? <div className="p-4"><Spinner /></div> : (
-          conversations.map(({ session, recentMessages }) => (
-            <button
-              key={session.phone}
-              onClick={() => openConversation(session.phone)}
-              className={`w-full text-left p-3 border-b hover:bg-gray-50 transition-colors ${selected === session.phone ? 'bg-green-50 border-l-2 border-l-green-500' : ''}`}
-            >
-              <p className="text-sm font-medium text-gray-800 truncate">
-                {session.userId?.name || session.phone}
-              </p>
-              <p className="text-xs text-gray-400">{session.phone}</p>
-              <p className="text-xs text-gray-500 capitalize">{session.role}</p>
-              {recentMessages[recentMessages.length - 1] && (
-                <p className="text-xs text-gray-400 mt-1 truncate">
-                  {recentMessages[recentMessages.length - 1].direction === 'inbound' ? '← ' : '→ '}
-                  {recentMessages[recentMessages.length - 1].message}
-                </p>
-              )}
-            </button>
-          ))
-        )}
-        {totalPages > 1 && (
-          <div className="p-2 flex justify-center gap-2">
-            <button disabled={page === 1} onClick={() => setPage(p => p - 1)} className="text-xs px-2 py-1 border rounded disabled:opacity-40">Prev</button>
-            <button disabled={page >= totalPages} onClick={() => setPage(p => p + 1)} className="text-xs px-2 py-1 border rounded disabled:opacity-40">Next</button>
-          </div>
-        )}
-      </div>
-
-      <div className="flex-grow border rounded-lg flex flex-col overflow-hidden">
-        {!selected ? (
-          <div className="flex items-center justify-center h-full text-gray-400 text-sm">
-            Select a conversation to view messages
-          </div>
-        ) : msgLoading ? (
-          <div className="flex items-center justify-center h-full"><Spinner /></div>
-        ) : (
-          <div className="flex flex-col h-full">
-            <div className="p-3 border-b bg-gray-50 flex items-center gap-2">
-              <FiPhone size={14} className="text-gray-400" />
-              <span className="text-sm font-medium text-gray-700">{selected}</span>
-            </div>
-            <div className="flex-grow overflow-y-auto p-4 space-y-2">
-              {messages.map((msg) => (
-                <div key={msg._id} className={`flex ${msg.direction === 'outbound' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-xs px-3 py-2 rounded-lg text-sm ${
-                    msg.direction === 'outbound' ? 'bg-green-500 text-white' : 'bg-gray-100 text-gray-800'
-                  }`}>
-                    <p className="whitespace-pre-wrap break-words">{msg.message}</p>
-                    <p className={`text-xs mt-1 ${msg.direction === 'outbound' ? 'text-green-100' : 'text-gray-400'}`}>
-                      {new Date(msg.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
-                    </p>
-                  </div>
-                </div>
-              ))}
-              {messages.length === 0 && <p className="text-center text-gray-400 text-sm">No messages yet</p>}
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ─── Broadcast Tab ────────────────────────────────────────────────────────────
-function BroadcastPanel() {
-  const [form, setForm] = useState({ message: '', role: 'buyer', phones: '' });
-  const [sending, setSending] = useState(false);
-  const [result, setResult] = useState(null);
-
-  const handleSend = async () => {
-    if (!form.message.trim()) return toast.error('Message is required');
-    setSending(true);
-    setResult(null);
-    try {
-      const payload = {
-        message: form.message,
-        role: form.phones.trim() ? undefined : form.role,
-        phones: form.phones.trim() ? form.phones.split(/[\n,]+/).map((p) => p.trim()).filter(Boolean) : [],
-      };
-      const res = await waAdminAPI.sendBroadcast(payload);
-      setResult(res.data);
-      toast.success(`Broadcast sent to ${res.data.sent} contacts`);
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Broadcast failed');
-    } finally {
-      setSending(false);
-    }
-  };
-
-  return (
-    <div className="max-w-2xl space-y-4">
-      <div className="card p-5">
-        <h3 className="font-semibold text-gray-800 mb-4 flex items-center gap-2"><FiRadio /> Send Broadcast Message</h3>
-
-        <div className="space-y-3">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Target Audience</label>
-            <select
-              value={form.role}
-              onChange={(e) => setForm({ ...form, role: e.target.value })}
-              className="w-full input"
-            >
-              <option value="buyer">All Buyers</option>
-              <option value="seller">All Vendors</option>
-              <option value="">Custom (enter phones below)</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Custom Phones (optional, one per line or comma-separated)
-            </label>
-            <textarea
-              value={form.phones}
-              onChange={(e) => setForm({ ...form, phones: e.target.value })}
-              className="w-full input h-20 resize-none font-mono text-sm"
-              placeholder="9876543210&#10;9123456789"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Message</label>
-            <textarea
-              value={form.message}
-              onChange={(e) => setForm({ ...form, message: e.target.value })}
-              className="w-full input h-32 resize-none"
-              placeholder="Enter your broadcast message. Supports WhatsApp formatting: *bold*, _italic_, ~strikethrough~"
-            />
-            <p className="text-xs text-gray-400 mt-1">{form.message.length} characters</p>
-          </div>
-
-          <button
-            onClick={handleSend}
-            disabled={sending || !form.message.trim()}
-            className="btn-primary w-full flex items-center justify-center gap-2 disabled:opacity-60"
-          >
-            {sending ? <><FiRefreshCw className="animate-spin" /> Sending...</> : <><FiSend /> Send Broadcast</>}
-          </button>
-        </div>
-      </div>
-
-      {result && (
-        <div className="card p-4 border-l-4 border-green-500">
-          <h4 className="font-medium text-gray-800 mb-2">Broadcast Result</h4>
-          <div className="grid grid-cols-3 gap-4 text-center">
-            <div><p className="text-2xl font-bold text-green-600">{result.sent}</p><p className="text-xs text-gray-500">Sent</p></div>
-            <div><p className="text-2xl font-bold text-red-500">{result.failed}</p><p className="text-xs text-gray-500">Failed</p></div>
-            <div><p className="text-2xl font-bold text-gray-700">{result.total}</p><p className="text-xs text-gray-500">Total</p></div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── Direct Message Tab ───────────────────────────────────────────────────────
-function DirectMessagePanel() {
-  const [form, setForm] = useState({ phone: '', message: '' });
-  const [sending, setSending] = useState(false);
-
-  const handleSend = async () => {
-    if (!form.phone.trim() || !form.message.trim()) return toast.error('Phone and message are required');
-    setSending(true);
-    try {
-      await waAdminAPI.sendDirect(form);
-      toast.success('Message sent!');
-      setForm({ phone: '', message: '' });
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to send');
-    } finally {
-      setSending(false);
-    }
-  };
-
-  return (
-    <div className="max-w-lg">
-      <div className="card p-5 space-y-4">
-        <h3 className="font-semibold text-gray-800 flex items-center gap-2"><FiSend /> Send Direct Message</h3>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number</label>
-          <input
-            type="text"
-            value={form.phone}
-            onChange={(e) => setForm({ ...form, phone: e.target.value })}
-            className="input w-full"
-            placeholder="9876543210 or +919876543210"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Message</label>
-          <textarea
-            value={form.message}
-            onChange={(e) => setForm({ ...form, message: e.target.value })}
-            className="input w-full h-28 resize-none"
-            placeholder="Type your message here..."
-          />
-        </div>
-        <button
-          onClick={handleSend}
-          disabled={sending}
-          className="btn-primary w-full flex items-center justify-center gap-2 disabled:opacity-60"
-        >
-          {sending ? <><FiRefreshCw className="animate-spin" /> Sending...</> : <><FiSend /> Send Message</>}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ─── Logs Tab ─────────────────────────────────────────────────────────────────
-function LogsPanel() {
-  const [logs, setLogs] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [page, setPage] = useState(1);
-  const [total, setTotal] = useState(0);
-  const [filter, setFilter] = useState({ phone: '', direction: '' });
-
-  const load = useCallback(() => {
-    setLoading(true);
-    waAdminAPI.getLogs({ page, limit: 30, ...filter }).then((r) => {
-      setLogs(r.data.logs || []);
-      setTotal(r.data.total || 0);
-      setLoading(false);
-    }).catch(() => setLoading(false));
-  }, [page, filter]);
 
   useEffect(() => { load(); }, [load]);
 
+  if (loading) return <div className="flex justify-center py-20"><Spinner /></div>;
+  if (!stats) return null;
+
+  const maxDaily = Math.max(...(stats.dailyMessages || []).map((d) => d.count || 0), 1);
+
   return (
-    <div className="space-y-3">
-      <div className="flex gap-3 flex-wrap">
-        <input
-          type="text"
-          value={filter.phone}
-          onChange={(e) => { setFilter({ ...filter, phone: e.target.value }); setPage(1); }}
-          className="input"
-          placeholder="Filter by phone"
-        />
-        <select
-          value={filter.direction}
-          onChange={(e) => { setFilter({ ...filter, direction: e.target.value }); setPage(1); }}
-          className="input"
-        >
-          <option value="">All directions</option>
-          <option value="inbound">Inbound</option>
-          <option value="outbound">Outbound</option>
-        </select>
-        <button onClick={load} className="btn-secondary flex items-center gap-1 text-sm">
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-gray-800">WhatsApp Analytics</h2>
+        <button className="btn-secondary flex items-center gap-2 text-sm" onClick={load}>
           <FiRefreshCw size={14} /> Refresh
         </button>
-        <span className="text-sm text-gray-500 self-center">{total} total logs</span>
       </div>
 
-      {loading ? <Spinner /> : (
-        <div className="overflow-x-auto">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        <StatCard label="Total Messages" value={stats.totalMessages} icon={FiMessageSquare} color="blue" />
+        <StatCard label="Inbound" value={stats.inboundMessages} icon={FiActivity} color="green" />
+        <StatCard label="Outbound" value={stats.outboundMessages} icon={FiSend} color="purple" />
+        <StatCard label="Active Sessions (7d)" value={stats.activeSessionsLast7Days} icon={FiClock} color="amber" />
+        <StatCard label="Windows Opened" value={stats.windowOpenCount} icon={FiZap} color="blue" />
+        <StatCard label="Opt-Outs" value={stats.optOutCount} icon={FiXCircle} color="red" />
+      </div>
+
+      {stats.dailyMessages && stats.dailyMessages.length > 0 && (
+        <div className="card p-4">
+          <h3 className="text-sm font-semibold text-gray-700 mb-4">Daily Message Volume</h3>
+          <div className="flex items-end gap-2 h-32">
+            {stats.dailyMessages.map((d, i) => (
+              <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                <div
+                  className="w-full bg-blue-500 rounded-t"
+                  style={{ height: `${Math.round(((d.count || 0) / maxDaily) * 100)}%`, minHeight: "2px" }}
+                  title={`${d.count} messages`}
+                />
+                <span className="text-xs text-gray-400 truncate w-full text-center">{d.date?.slice(5)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {stats.config && (
+        <div className="card p-4 flex items-center gap-3">
+          <FiSettings size={18} className="text-gray-500" />
+          <div>
+            <p className="text-sm font-medium text-gray-700">Config Status</p>
+            <p className="text-xs text-gray-500">{stats.config.status || "Configured"} — Phone: {stats.config.phone || "—"}</p>
+          </div>
+          <StatusBadge active={stats.config.active} className="ml-auto" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Conversations / Inbox Panel ──────────────────────────────────────────────
+
+function ConversationsPanel() {
+  const [convos, setConvos] = useState([]);
+  const [selected, setSelected] = useState(null);
+  const [messages, setMessages] = useState([]);
+  const [search, setSearch] = useState("");
+  const [reply, setReply] = useState("");
+  const [replyType, setReplyType] = useState("text");
+  const [tplName, setTplName] = useState("");
+  const [tplLang, setTplLang] = useState("en");
+  const [tplParams, setTplParams] = useState("");
+  const [sending, setSending] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const bottomRef = useRef(null);
+
+  const loadConvos = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await waAdminAPI.getConversations({ search });
+      setConvos(res.data?.conversations || res.data || []);
+    } catch { toast.error("Failed to load conversations"); }
+    finally { setLoading(false); }
+  }, [search]);
+
+  const loadMessages = useCallback(async (phone) => {
+    try {
+      const res = await waAdminAPI.getConversationByPhone(phone);
+      setMessages(res.data?.messages || res.data || []);
+      setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+    } catch { toast.error("Failed to load messages"); }
+  }, []);
+
+  useEffect(() => { loadConvos(); }, [loadConvos]);
+  useEffect(() => { if (selected) loadMessages(selected.phone); }, [selected, loadMessages]);
+
+  const handleSend = async () => {
+    if (!selected) return;
+    if (replyType === "text" && !reply.trim()) return toast.error("Message is empty");
+    if (replyType === "template" && !tplName.trim()) return toast.error("Template name required");
+    setSending(true);
+    try {
+      const payload = replyType === "text"
+        ? { message: reply, messageType: "text" }
+        : { messageType: "template", templateName: tplName, templateLanguage: tplLang, templateParams: tplParams.split(",").map(s => s.trim()).filter(Boolean) };
+      await waAdminAPI.replyToConversation(selected.phone, payload);
+      toast.success("Sent");
+      setReply(""); setTplName(""); setTplParams("");
+      loadMessages(selected.phone);
+    } catch { toast.error("Failed to send"); }
+    finally { setSending(false); }
+  };
+
+  const windowOpen = selected?.windowExpiresAt && new Date(selected.windowExpiresAt) > new Date();
+  const minsLeft = selected ? minutesUntil(selected.windowExpiresAt) : null;
+
+  return (
+    <div className="flex gap-4 h-full" style={{ minHeight: "600px" }}>
+      {/* Sidebar */}
+      <div className="w-72 flex-shrink-0 flex flex-col card overflow-hidden">
+        <div className="p-3 border-b">
+          <input className="input w-full text-sm" placeholder="Search phone or name…" value={search}
+            onChange={e => setSearch(e.target.value)} />
+        </div>
+        <div className="overflow-y-auto flex-1">
+          {loading ? <div className="flex justify-center py-8"><Spinner /></div> :
+            convos.length === 0 ? <p className="text-center text-gray-400 py-8 text-sm">No conversations</p> :
+            convos.map(c => {
+              const mins = minutesUntil(c.windowExpiresAt);
+              const open = c.windowExpiresAt && new Date(c.windowExpiresAt) > new Date();
+              return (
+                <button key={c.phone} onClick={() => setSelected(c)}
+                  className={`w-full text-left px-3 py-3 border-b hover:bg-gray-50 transition-colors ${selected?.phone === c.phone ? "bg-blue-50" : ""}`}>
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium text-sm text-gray-800 truncate">{c.name || c.phone}</span>
+                    {c.windowExpiresAt && (
+                      <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${open ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-400"}`}>
+                        {open ? `${mins}m` : "closed"}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-400 mt-0.5 truncate">{c.phone}</p>
+                  {c.lastMessage && <p className="text-xs text-gray-500 mt-1 truncate">{c.lastMessage}</p>}
+                </button>
+              );
+            })
+          }
+        </div>
+      </div>
+
+      {/* Chat area */}
+      <div className="flex-1 flex flex-col card overflow-hidden">
+        {!selected ? (
+          <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">
+            <div className="text-center"><FiMessageSquare size={36} className="mx-auto mb-2 opacity-30" /><p>Select a conversation</p></div>
+          </div>
+        ) : (
+          <>
+            <div className="px-4 py-3 border-b flex items-center justify-between">
+              <div>
+                <p className="font-semibold text-gray-800">{selected.name || selected.phone}</p>
+                <p className="text-xs text-gray-400">{selected.phone}</p>
+              </div>
+              <button className="btn-secondary text-xs flex items-center gap-1" onClick={() => loadMessages(selected.phone)}>
+                <FiRefreshCw size={12} /> Refresh
+              </button>
+            </div>
+
+            {!windowOpen && (
+              <div className="mx-4 mt-3 flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                <FiAlertCircle size={14} className="text-amber-500 flex-shrink-0" />
+                <p className="text-xs text-amber-700">24h window is closed. You can only send template messages.</p>
+              </div>
+            )}
+
+            <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
+              {messages.map((m, i) => (
+                <div key={i} className={`flex ${m.direction === "outbound" ? "justify-end" : "justify-start"}`}>
+                  <div className={`max-w-xs lg:max-w-md px-3 py-2 rounded-2xl text-sm ${m.direction === "outbound" ? "bg-green-500 text-white rounded-br-sm" : "bg-gray-100 text-gray-800 rounded-bl-sm"}`}>
+                    <p>{m.message || m.body || "(media)"}</p>
+                    <p className={`text-xs mt-1 ${m.direction === "outbound" ? "text-green-100" : "text-gray-400"}`}>{fmtTime(m.createdAt)}</p>
+                  </div>
+                </div>
+              ))}
+              <div ref={bottomRef} />
+            </div>
+
+            <div className="border-t p-3 space-y-2">
+              <div className="flex gap-2 items-center">
+                <select className="input text-sm py-1.5" value={replyType} onChange={e => setReplyType(e.target.value)}>
+                  <option value="text">Text</option>
+                  <option value="template">Template</option>
+                </select>
+              </div>
+              {replyType === "text" ? (
+                <div className="flex gap-2">
+                  <textarea className="input flex-1 text-sm resize-none" rows={2} placeholder="Type a message…"
+                    value={reply} onChange={e => setReply(e.target.value)}
+                    onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }} />
+                  <button className="btn-primary px-4 flex items-center gap-1 self-end" onClick={handleSend} disabled={sending}>
+                    {sending ? <Spinner size="sm" /> : <FiSend size={14} />}
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="flex gap-2">
+                    <input className="input flex-1 text-sm" placeholder="Template name" value={tplName} onChange={e => setTplName(e.target.value)} />
+                    <input className="input w-20 text-sm" placeholder="Lang" value={tplLang} onChange={e => setTplLang(e.target.value)} />
+                  </div>
+                  <div className="flex gap-2">
+                    <input className="input flex-1 text-sm" placeholder="Params (comma separated)" value={tplParams} onChange={e => setTplParams(e.target.value)} />
+                    <button className="btn-primary px-4 flex items-center gap-1" onClick={handleSend} disabled={sending}>
+                      {sending ? <Spinner size="sm" /> : <FiSend size={14} />}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── 24h Window Panel ─────────────────────────────────────────────────────────
+
+function WindowPanel() {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      try {
+        const res = await waAdminAPI.getWindowStatus();
+        setData(res.data);
+      } catch { toast.error("Failed to load window status"); }
+      finally { setLoading(false); }
+    })();
+  }, []);
+
+  if (loading) return <div className="flex justify-center py-20"><Spinner /></div>;
+  if (!data) return null;
+
+  const sessions = (data.openSessions || []).slice().sort((a, b) => new Date(a.expiresAt) - new Date(b.expiresAt));
+
+  const windowColor = (mins) => {
+    if (mins < 60) return "text-red-600 bg-red-50";
+    if (mins < 240) return "text-amber-600 bg-amber-50";
+    return "text-green-700 bg-green-50";
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-3 gap-4">
+        <StatCard label="Open Windows" value={data.openCount} icon={FiCheckCircle} color="green" />
+        <StatCard label="Closed Windows" value={data.closedCount} icon={FiXCircle} color="red" />
+        <StatCard label="Total Sessions" value={data.totalCount} icon={FiClock} color="blue" />
+      </div>
+
+      <div className="card p-4 flex items-start gap-3 bg-blue-50 border-blue-200">
+        <FiAlertCircle size={16} className="text-blue-500 mt-0.5 flex-shrink-0" />
+        <p className="text-sm text-blue-700">
+          Meta's 24-hour rule: You can send free-form messages only within 24 hours of the customer's last inbound message. After the window closes, only approved template messages are allowed.
+        </p>
+      </div>
+
+      {sessions.length === 0 ? (
+        <p className="text-center text-gray-400 py-10">No open windows</p>
+      ) : (
+        <div className="card overflow-hidden">
+          <div className="px-4 py-3 border-b"><h3 className="font-semibold text-gray-700">Open Sessions (soonest expiry first)</h3></div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="text-left px-4 py-2 text-gray-500 font-medium">Phone</th>
+                  <th className="text-left px-4 py-2 text-gray-500 font-medium">Name</th>
+                  <th className="text-left px-4 py-2 text-gray-500 font-medium">Expires At</th>
+                  <th className="text-left px-4 py-2 text-gray-500 font-medium">Time Left</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sessions.map((s, i) => {
+                  const mins = minutesUntil(s.expiresAt);
+                  const cls = windowColor(mins);
+                  return (
+                    <tr key={i} className="border-t hover:bg-gray-50">
+                      <td className="px-4 py-2 font-mono text-xs">{s.phone}</td>
+                      <td className="px-4 py-2 text-gray-700">{s.name || "—"}</td>
+                      <td className="px-4 py-2 text-gray-500">{fmtTime(s.expiresAt)}</td>
+                      <td className="px-4 py-2">
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${cls}`}>{mins}m remaining</span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Campaign Form ────────────────────────────────────────────────────────────
+
+function CampaignForm({ initial, onSave, onCancel }) {
+  const isEdit = !!initial;
+  const [form, setForm] = useState({
+    name: initial?.name || "",
+    type: initial?.type || "auto_reply",
+    keywords: initial?.keywords || [],
+    matchType: initial?.matchType || "contains",
+    role: initial?.role || "all",
+    audienceRole: initial?.audienceRole || "all",
+    premiumOnly: initial?.premiumOnly || false,
+    respectOptOut: initial?.respectOptOut !== false,
+    messageType: initial?.messageType || "text",
+    content: initial?.content || "",
+    templateName: initial?.templateName || "",
+    templateLanguage: initial?.templateLanguage || "en",
+    templateParams: initial?.templateParams?.join(", ") || "",
+  });
+  const [kwInput, setKwInput] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  const addKeyword = () => {
+    if (!kwInput.trim()) return;
+    set("keywords", [...form.keywords, kwInput.trim()]);
+    setKwInput("");
+  };
+
+  const removeKeyword = (kw) => set("keywords", form.keywords.filter(k => k !== kw));
+
+  const handleSave = async () => {
+    if (!form.name.trim()) return toast.error("Name is required");
+    setSaving(true);
+    try {
+      const payload = { ...form, templateParams: form.templateParams.split(",").map(s => s.trim()).filter(Boolean) };
+      if (isEdit) await waAdminAPI.updateCampaign(initial._id, payload);
+      else await waAdminAPI.createCampaign(payload);
+      toast.success(isEdit ? "Campaign updated" : "Campaign created");
+      onSave();
+    } catch { toast.error("Failed to save campaign"); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <div className="card p-5 space-y-4">
+      <h3 className="font-semibold text-gray-800">{isEdit ? "Edit Campaign" : "New Campaign"}</h3>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="text-xs font-medium text-gray-600 mb-1 block">Name</label>
+          <input className="input w-full" value={form.name} onChange={e => set("name", e.target.value)} />
+        </div>
+        <div>
+          <label className="text-xs font-medium text-gray-600 mb-1 block">Type</label>
+          <select className="input w-full" value={form.type} onChange={e => set("type", e.target.value)}>
+            <option value="auto_reply">Auto Reply</option>
+            <option value="broadcast_campaign">Broadcast Campaign</option>
+          </select>
+        </div>
+      </div>
+
+      {form.type === "auto_reply" && (
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs font-medium text-gray-600 mb-1 block">Keywords</label>
+            <div className="flex gap-2 mb-2">
+              <input className="input flex-1" placeholder="Add keyword" value={kwInput}
+                onChange={e => setKwInput(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && addKeyword()} />
+              <button className="btn-secondary" onClick={addKeyword}><FiPlus size={14} /></button>
+            </div>
+            <div className="flex flex-wrap gap-1">
+              {form.keywords.map(kw => (
+                <span key={kw} className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs">
+                  {kw}<button onClick={() => removeKeyword(kw)}><FiXCircle size={10} /></button>
+                </span>
+              ))}
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-xs font-medium text-gray-600 mb-1 block">Match Type</label>
+              <select className="input w-full" value={form.matchType} onChange={e => set("matchType", e.target.value)}>
+                <option value="contains">Contains</option>
+                <option value="exact">Exact</option>
+                <option value="startsWith">Starts With</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-600 mb-1 block">Target Role</label>
+              <select className="input w-full" value={form.role} onChange={e => set("role", e.target.value)}>
+                <option value="all">All</option>
+                <option value="buyer">Buyer</option>
+                <option value="seller">Seller</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {form.type === "broadcast_campaign" && (
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-xs font-medium text-gray-600 mb-1 block">Audience Role</label>
+              <select className="input w-full" value={form.audienceRole} onChange={e => set("audienceRole", e.target.value)}>
+                <option value="all">All</option>
+                <option value="buyer">Buyers</option>
+                <option value="seller">Sellers</option>
+              </select>
+            </div>
+          </div>
+          <div className="flex gap-6">
+            <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+              <input type="checkbox" checked={form.premiumOnly} onChange={e => set("premiumOnly", e.target.checked)} />
+              Premium only
+            </label>
+            <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+              <input type="checkbox" checked={form.respectOptOut} onChange={e => set("respectOptOut", e.target.checked)} />
+              Respect opt-outs
+            </label>
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-3">
+        <div>
+          <label className="text-xs font-medium text-gray-600 mb-1 block">Response Type</label>
+          <select className="input w-48" value={form.messageType} onChange={e => set("messageType", e.target.value)}>
+            <option value="text">Text</option>
+            <option value="template">Template</option>
+          </select>
+        </div>
+        {form.messageType === "text" ? (
+          <div>
+            <label className="text-xs font-medium text-gray-600 mb-1 block">Message Content</label>
+            <textarea className="input w-full" rows={3} value={form.content} onChange={e => set("content", e.target.value)} />
+          </div>
+        ) : (
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="text-xs font-medium text-gray-600 mb-1 block">Template Name</label>
+              <input className="input w-full" value={form.templateName} onChange={e => set("templateName", e.target.value)} />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-600 mb-1 block">Language</label>
+              <input className="input w-full" value={form.templateLanguage} onChange={e => set("templateLanguage", e.target.value)} />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-600 mb-1 block">Params (comma sep)</label>
+              <input className="input w-full" value={form.templateParams} onChange={e => set("templateParams", e.target.value)} />
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="flex gap-3 pt-2">
+        <button className="btn-primary flex items-center gap-2" onClick={handleSave} disabled={saving}>
+          {saving ? <Spinner size="sm" /> : <FiCheckCircle size={14} />} {isEdit ? "Update" : "Create"}
+        </button>
+        <button className="btn-secondary" onClick={onCancel}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Campaigns Panel ──────────────────────────────────────────────────────────
+
+function CampaignsPanel() {
+  const [campaigns, setCampaigns] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [editing, setEditing] = useState(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await waAdminAPI.getCampaigns();
+      setCampaigns(res.data?.campaigns || res.data || []);
+    } catch { toast.error("Failed to load campaigns"); }
+    finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const handleDelete = async (id) => {
+    if (!confirm("Delete this campaign?")) return;
+    try { await waAdminAPI.deleteCampaign(id); toast.success("Deleted"); load(); }
+    catch { toast.error("Failed to delete"); }
+  };
+
+  const handleToggle = async (c) => {
+    try {
+      await waAdminAPI.updateCampaign(c._id, { active: !c.active });
+      toast.success(c.active ? "Paused" : "Activated");
+      load();
+    } catch { toast.error("Failed to update"); }
+  };
+
+  const handleRun = async (id) => {
+    try { await waAdminAPI.runCampaign(id); toast.success("Campaign running"); load(); }
+    catch { toast.error("Failed to run campaign"); }
+  };
+
+  const openEdit = (c) => { setEditing(c); setShowForm(true); };
+  const closeForm = () => { setShowForm(false); setEditing(null); };
+  const afterSave = () => { closeForm(); load(); };
+
+  if (loading) return <div className="flex justify-center py-20"><Spinner /></div>;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-gray-800">Campaigns</h2>
+        {!showForm && (
+          <button className="btn-primary flex items-center gap-2 text-sm" onClick={() => { setEditing(null); setShowForm(true); }}>
+            <FiPlus size={14} /> New Campaign
+          </button>
+        )}
+      </div>
+
+      {showForm && <CampaignForm initial={editing} onSave={afterSave} onCancel={closeForm} />}
+
+      {campaigns.length === 0 && !showForm ? (
+        <p className="text-center text-gray-400 py-10">No campaigns yet</p>
+      ) : (
+        campaigns.map(c => (
+          <div key={c._id} className="card p-4 flex items-center gap-4">
+            <div className="flex-1">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="font-medium text-gray-800">{c.name}</span>
+                <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full">{c.type}</span>
+                <StatusBadge active={c.active} />
+              </div>
+              <p className="text-xs text-gray-400">{c.type === "auto_reply" ? `Keywords: ${(c.keywords || []).join(", ") || "—"}` : `Audience: ${c.audienceRole || "all"}`}</p>
+            </div>
+            <div className="flex items-center gap-2">
+              {c.type === "broadcast_campaign" && (
+                <button className="btn-secondary text-xs flex items-center gap-1" onClick={() => handleRun(c._id)}>
+                  <FiPlay size={12} /> Run
+                </button>
+              )}
+              <button className="btn-secondary text-xs flex items-center gap-1" onClick={() => handleToggle(c)}>
+                {c.active ? <FiPause size={12} /> : <FiPlay size={12} />} {c.active ? "Pause" : "Activate"}
+              </button>
+              <button className="btn-secondary text-xs flex items-center gap-1" onClick={() => openEdit(c)}>
+                <FiEdit2 size={12} /> Edit
+              </button>
+              <button className="text-red-400 hover:text-red-600 transition-colors p-1" onClick={() => handleDelete(c._id)}>
+                <FiTrash2 size={14} />
+              </button>
+            </div>
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
+// ─── Broadcast Panel ──────────────────────────────────────────────────────────
+
+function BroadcastPanel() {
+  const [form, setForm] = useState({ campaignName: "", role: "all", messageType: "text", message: "", templateName: "", templateLanguage: "en", templateParams: "" });
+  const [sending, setSending] = useState(false);
+  const [result, setResult] = useState(null);
+
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  const handleSend = async () => {
+    setSending(true); setResult(null);
+    try {
+      const payload = { ...form, templateParams: form.templateParams.split(",").map(s => s.trim()).filter(Boolean) };
+      const res = await waAdminAPI.sendBroadcast(payload);
+      setResult(res.data);
+      toast.success("Broadcast sent");
+    } catch { toast.error("Broadcast failed"); }
+    finally { setSending(false); }
+  };
+
+  return (
+    <div className="space-y-5 max-w-2xl">
+      <h2 className="text-lg font-semibold text-gray-800">Broadcast Message</h2>
+      <div className="card p-4 flex items-start gap-3 bg-amber-50 border-amber-200">
+        <FiAlertCircle size={15} className="text-amber-500 mt-0.5 flex-shrink-0" />
+        <p className="text-sm text-amber-700">Text messages can only be delivered within the 24h window. For guaranteed delivery, use an approved template.</p>
+      </div>
+      <div className="card p-5 space-y-4">
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="text-xs font-medium text-gray-600 mb-1 block">Campaign Name (optional)</label>
+            <input className="input w-full" value={form.campaignName} onChange={e => set("campaignName", e.target.value)} />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-gray-600 mb-1 block">Audience Role</label>
+            <select className="input w-full" value={form.role} onChange={e => set("role", e.target.value)}>
+              <option value="all">All Users</option>
+              <option value="seller">Sellers</option>
+              <option value="buyer">Buyers</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label className="text-xs font-medium text-gray-600 mb-1 block">Message Type</label>
+          <select className="input w-48" value={form.messageType} onChange={e => set("messageType", e.target.value)}>
+            <option value="text">Text</option>
+            <option value="template">Template</option>
+          </select>
+        </div>
+        {form.messageType === "text" ? (
+          <div>
+            <label className="text-xs font-medium text-gray-600 mb-1 block">Message</label>
+            <textarea className="input w-full" rows={4} value={form.message} onChange={e => set("message", e.target.value)} />
+          </div>
+        ) : (
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="text-xs font-medium text-gray-600 mb-1 block">Template Name</label>
+              <input className="input w-full" value={form.templateName} onChange={e => set("templateName", e.target.value)} />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-600 mb-1 block">Language</label>
+              <input className="input w-full" value={form.templateLanguage} onChange={e => set("templateLanguage", e.target.value)} />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-600 mb-1 block">Params (comma sep)</label>
+              <input className="input w-full" value={form.templateParams} onChange={e => set("templateParams", e.target.value)} />
+            </div>
+          </div>
+        )}
+        <button className="btn-primary flex items-center gap-2" onClick={handleSend} disabled={sending}>
+          {sending ? <Spinner size="sm" /> : <FiRadio size={14} />} Send Broadcast
+        </button>
+      </div>
+      {result && (
+        <div className="card p-4 grid grid-cols-3 gap-4 text-center">
+          <div><p className="text-2xl font-bold text-gray-800">{fmt(result.total)}</p><p className="text-xs text-gray-500">Total</p></div>
+          <div><p className="text-2xl font-bold text-green-600">{fmt(result.sent)}</p><p className="text-xs text-gray-500">Sent</p></div>
+          <div><p className="text-2xl font-bold text-red-500">{fmt(result.failed)}</p><p className="text-xs text-gray-500">Failed</p></div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Direct Message Panel ─────────────────────────────────────────────────────
+
+function DirectMessagePanel() {
+  const [phone, setPhone] = useState("");
+  const [message, setMessage] = useState("");
+  const [sending, setSending] = useState(false);
+
+  const handleSend = async () => {
+    if (!phone.trim()) return toast.error("Phone number required");
+    if (!message.trim()) return toast.error("Message required");
+    setSending(true);
+    try {
+      await waAdminAPI.sendDirect({ phone, message });
+      toast.success("Message sent");
+      setMessage("");
+    } catch { toast.error("Failed to send"); }
+    finally { setSending(false); }
+  };
+
+  return (
+    <div className="space-y-5 max-w-xl">
+      <h2 className="text-lg font-semibold text-gray-800">Direct Message</h2>
+      <div className="card p-4 flex items-start gap-3 bg-amber-50 border-amber-200">
+        <FiAlertCircle size={15} className="text-amber-500 mt-0.5 flex-shrink-0" />
+        <p className="text-sm text-amber-700">Only send to users who have an open 24h window, or use template messages to reach users outside the window.</p>
+      </div>
+      <div className="card p-5 space-y-4">
+        <div>
+          <label className="text-xs font-medium text-gray-600 mb-1 block">Phone Number</label>
+          <div className="flex items-center gap-2">
+            <FiPhone size={14} className="text-gray-400 flex-shrink-0" />
+            <input className="input flex-1" placeholder="+1234567890" value={phone} onChange={e => setPhone(e.target.value)} />
+          </div>
+        </div>
+        <div>
+          <label className="text-xs font-medium text-gray-600 mb-1 block">Message</label>
+          <textarea className="input w-full" rows={4} value={message} onChange={e => setMessage(e.target.value)} />
+        </div>
+        <button className="btn-primary flex items-center gap-2" onClick={handleSend} disabled={sending}>
+          {sending ? <Spinner size="sm" /> : <FiSend size={14} />} Send Message
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Templates Panel ─────────────────────────────────────────────────────────
+
+function TemplatesPanel() {
+  const [templates, setTemplates] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await waAdminAPI.getTemplates();
+      setTemplates(res.data?.templates || res.data || []);
+    } catch { toast.error("Failed to load templates"); }
+    finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const handleSync = async () => {
+    setSyncing(true);
+    try { await waAdminAPI.syncTemplates(); toast.success("Templates synced"); load(); }
+    catch { toast.error("Sync failed"); }
+    finally { setSyncing(false); }
+  };
+
+  const statusColor = (status) => {
+    if (status === "APPROVED") return "bg-green-100 text-green-700";
+    if (status === "PENDING") return "bg-amber-100 text-amber-700";
+    return "bg-red-100 text-red-600";
+  };
+
+  if (loading) return <div className="flex justify-center py-20"><Spinner /></div>;
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-gray-800">Templates</h2>
+        <button className="btn-secondary flex items-center gap-2 text-sm" onClick={handleSync} disabled={syncing}>
+          {syncing ? <Spinner size="sm" /> : <FiRefreshCw size={14} />} Sync from Meta
+        </button>
+      </div>
+      <div className="card p-4 flex items-start gap-3 bg-blue-50 border-blue-200">
+        <FiBell size={15} className="text-blue-500 mt-0.5 flex-shrink-0" />
+        <p className="text-sm text-blue-700">Only APPROVED templates can be used in broadcasts and outside the 24h window. Templates must be submitted to Meta for review before use.</p>
+      </div>
+      {templates.length === 0 ? (
+        <p className="text-center text-gray-400 py-10">No templates found. Click "Sync from Meta" to import.</p>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {templates.map((t, i) => (
+            <div key={i} className="card p-4 space-y-2">
+              <div className="flex items-start justify-between gap-2">
+                <p className="font-medium text-gray-800">{t.name}</p>
+                <span className={`text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${statusColor(t.status)}`}>{t.status || "UNKNOWN"}</span>
+              </div>
+              <div className="flex gap-2 text-xs text-gray-400">
+                <span>{t.category}</span><span>·</span><span>{t.language}</span>
+              </div>
+              {t.body && <p className="text-sm text-gray-600 bg-gray-50 rounded p-2">{t.body}</p>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Opt-Out Panel ────────────────────────────────────────────────────────────
+
+function OptOutPanel() {
+  const [optouts, setOptouts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [phone, setPhone] = useState("");
+  const [reason, setReason] = useState("");
+  const [adding, setAdding] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await waAdminAPI.getOptOuts();
+      setOptouts(res.data?.optouts || res.data || []);
+    } catch { toast.error("Failed to load opt-outs"); }
+    finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const handleAdd = async () => {
+    if (!phone.trim()) return toast.error("Phone required");
+    setAdding(true);
+    try { await waAdminAPI.addOptOut({ phone, reason }); toast.success("Added"); setPhone(""); setReason(""); load(); }
+    catch { toast.error("Failed to add opt-out"); }
+    finally { setAdding(false); }
+  };
+
+  const handleRemove = async (id) => {
+    if (!confirm("Remove this opt-out?")) return;
+    try { await waAdminAPI.removeOptOut(id); toast.success("Removed"); load(); }
+    catch { toast.error("Failed to remove"); }
+  };
+
+  return (
+    <div className="space-y-5">
+      <h2 className="text-lg font-semibold text-gray-800">Opt-Outs</h2>
+      <div className="card p-4 flex items-start gap-3 bg-blue-50 border-blue-200">
+        <FiAlertCircle size={15} className="text-blue-500 mt-0.5 flex-shrink-0" />
+        <p className="text-sm text-blue-700">GDPR compliance: Users who opt out will not receive any WhatsApp messages. Opt-outs are honoured automatically for all broadcasts and campaigns.</p>
+      </div>
+      <div className="card p-4 space-y-3">
+        <h3 className="text-sm font-semibold text-gray-700">Add Opt-Out</h3>
+        <div className="flex gap-3">
+          <input className="input flex-1" placeholder="Phone number" value={phone} onChange={e => setPhone(e.target.value)} />
+          <input className="input flex-1" placeholder="Reason (optional)" value={reason} onChange={e => setReason(e.target.value)} />
+          <button className="btn-primary flex items-center gap-2" onClick={handleAdd} disabled={adding}>
+            {adding ? <Spinner size="sm" /> : <FiPlus size={14} />} Add
+          </button>
+        </div>
+      </div>
+      {loading ? <div className="flex justify-center py-10"><Spinner /></div> :
+        optouts.length === 0 ? <p className="text-center text-gray-400 py-10">No opt-outs recorded</p> :
+        <div className="card overflow-hidden">
           <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b bg-gray-50">
-                <th className="text-left px-3 py-2 text-gray-600 font-medium">Time</th>
-                <th className="text-left px-3 py-2 text-gray-600 font-medium">Dir</th>
-                <th className="text-left px-3 py-2 text-gray-600 font-medium">Phone</th>
-                <th className="text-left px-3 py-2 text-gray-600 font-medium">User</th>
-                <th className="text-left px-3 py-2 text-gray-600 font-medium">Type</th>
-                <th className="text-left px-3 py-2 text-gray-600 font-medium">Message</th>
-                <th className="text-left px-3 py-2 text-gray-600 font-medium">Status</th>
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="text-left px-4 py-2 text-gray-500 font-medium">Phone</th>
+                <th className="text-left px-4 py-2 text-gray-500 font-medium">Reason</th>
+                <th className="text-left px-4 py-2 text-gray-500 font-medium">Date</th>
+                <th className="px-4 py-2" />
               </tr>
             </thead>
             <tbody>
-              {logs.map((log) => (
-                <tr key={log._id} className="border-b hover:bg-gray-50">
-                  <td className="px-3 py-2 text-gray-500 text-xs whitespace-nowrap">
-                    {new Date(log.createdAt).toLocaleDateString('en-IN')} {new Date(log.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
-                  </td>
-                  <td className="px-3 py-2">
-                    <span className={`badge text-xs ${log.direction === 'inbound' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'}`}>
-                      {log.direction === 'inbound' ? '← in' : '→ out'}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2 font-mono text-xs">{log.phone}</td>
-                  <td className="px-3 py-2 text-gray-700 text-xs">{log.userId?.name || '–'}</td>
-                  <td className="px-3 py-2 text-gray-500 text-xs">{log.messageType}</td>
-                  <td className="px-3 py-2 text-gray-700 max-w-xs truncate">{log.message}</td>
-                  <td className="px-3 py-2">
-                    <span className={`badge text-xs ${log.status === 'sent' || log.status === 'received' ? 'bg-gray-100 text-gray-600' : log.status === 'delivered' ? 'bg-green-100 text-green-600' : log.status === 'read' ? 'bg-blue-100 text-blue-600' : 'bg-red-100 text-red-600'}`}>
-                      {log.status}
-                    </span>
+              {optouts.map((o, i) => (
+                <tr key={i} className="border-t hover:bg-gray-50">
+                  <td className="px-4 py-2 font-mono text-xs">{o.phone}</td>
+                  <td className="px-4 py-2 text-gray-600">{o.reason || "—"}</td>
+                  <td className="px-4 py-2 text-gray-400">{fmtTime(o.createdAt)}</td>
+                  <td className="px-4 py-2 text-right">
+                    <button className="text-red-400 hover:text-red-600 transition-colors" onClick={() => handleRemove(o._id)}>
+                      <FiTrash2 size={14} />
+                    </button>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
-          {logs.length === 0 && <p className="text-center text-gray-400 py-8 text-sm">No logs found</p>}
         </div>
-      )}
-
-      <div className="flex items-center justify-between">
-        <button disabled={page === 1} onClick={() => setPage((p) => p - 1)} className="btn-secondary text-sm disabled:opacity-40">← Prev</button>
-        <span className="text-sm text-gray-500">Page {page}</span>
-        <button disabled={logs.length < 30} onClick={() => setPage((p) => p + 1)} className="btn-secondary text-sm disabled:opacity-40">Next →</button>
-      </div>
+      }
     </div>
   );
 }
 
-// ─── Bot Flow Reference ────────────────────────────────────────────────────────
-function BotFlowPanel() {
+// ─── Logs Panel ───────────────────────────────────────────────────────────────
+
+function LogsPanel() {
+  const [logs, setLogs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [filters, setFilters] = useState({ phone: "", direction: "", messageType: "" });
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const limit = 20;
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await waAdminAPI.getLogs({ ...filters, page, limit });
+      setLogs(res.data?.logs || res.data || []);
+      setTotal(res.data?.total || 0);
+    } catch { toast.error("Failed to load logs"); }
+    finally { setLoading(false); }
+  }, [filters, page]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const setFilter = (k, v) => { setFilters(f => ({ ...f, [k]: v })); setPage(1); };
+  const totalPages = Math.max(1, Math.ceil(total / limit));
+
   return (
-    <div className="grid md:grid-cols-2 gap-6">
-      <div className="card p-5">
-        <h3 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
-          <span className="text-green-600">👤</span> Buyer Commands
-        </h3>
-        <div className="space-y-2 text-sm">
-          {[
-            { cmd: 'Hi / Hello / Start', desc: 'Show welcome menu' },
-            { cmd: 'HELP', desc: 'Show all buyer commands' },
-            { cmd: 'STATUS', desc: 'View open inquiries & active orders' },
-            { cmd: 'ORDERS', desc: 'List recent orders' },
-            { cmd: 'QUOTES', desc: 'View pending quotations' },
-            { cmd: 'ACCEPT', desc: 'Accept latest pending quotation (auto-creates order)' },
-            { cmd: 'REJECT', desc: 'Reject latest pending quotation' },
-            { cmd: 'PAID [order-no]', desc: 'Confirm payment e.g. PAID PM-2024-0001' },
-            { cmd: 'TRACK [order-no]', desc: 'Get tracking info' },
-            { cmd: 'CANCEL [order-no]', desc: 'Cancel an order' },
-            { cmd: 'Any other text', desc: 'Reply to open inquiry thread' },
-          ].map((item) => (
-            <div key={item.cmd} className="flex gap-2">
-              <code className="text-green-700 bg-green-50 px-2 py-0.5 rounded text-xs font-mono whitespace-nowrap flex-shrink-0">{item.cmd}</code>
-              <span className="text-gray-600">{item.desc}</span>
-            </div>
-          ))}
+    <div className="space-y-4">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <h2 className="text-lg font-semibold text-gray-800">Message Logs</h2>
+        <div className="flex gap-2 flex-wrap">
+          <input className="input text-sm" placeholder="Filter by phone" value={filters.phone} onChange={e => setFilter("phone", e.target.value)} />
+          <select className="input text-sm" value={filters.direction} onChange={e => setFilter("direction", e.target.value)}>
+            <option value="">All directions</option>
+            <option value="inbound">Inbound</option>
+            <option value="outbound">Outbound</option>
+          </select>
+          <select className="input text-sm" value={filters.messageType} onChange={e => setFilter("messageType", e.target.value)}>
+            <option value="">All types</option>
+            <option value="text">Text</option>
+            <option value="template">Template</option>
+            <option value="image">Image</option>
+            <option value="document">Document</option>
+          </select>
         </div>
       </div>
-
-      <div className="card p-5">
-        <h3 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
-          <span className="text-blue-600">🏪</span> Vendor Commands
-        </h3>
-        <div className="space-y-2 text-sm">
-          {[
-            { cmd: 'Hi / Hello / MENU', desc: 'Show vendor welcome menu' },
-            { cmd: 'HELP', desc: 'Show all vendor commands' },
-            { cmd: 'STATUS', desc: 'Show pending inquiries & active orders' },
-            { cmd: 'ORDERS', desc: 'List all orders with status' },
-            { cmd: 'QUOTE 5000', desc: 'Create ₹5000 quotation for latest inquiry' },
-            { cmd: 'QUOTE INQ-ABC 8000', desc: 'Create quotation for specific inquiry' },
-            { cmd: 'DISPATCH PM-2024-0001 DTDC-TRK789', desc: 'Mark order dispatched with tracking' },
-            { cmd: 'DELIVER PM-2024-0001', desc: 'Mark order as delivered' },
-            { cmd: 'Any other text', desc: 'Reply to open inquiry thread' },
-          ].map((item) => (
-            <div key={item.cmd} className="flex gap-2">
-              <code className="text-blue-700 bg-blue-50 px-2 py-0.5 rounded text-xs font-mono whitespace-nowrap flex-shrink-0">{item.cmd}</code>
-              <span className="text-gray-600">{item.desc}</span>
+      {loading ? <div className="flex justify-center py-10"><Spinner /></div> :
+        logs.length === 0 ? <p className="text-center text-gray-400 py-10">No logs found</p> :
+        <div className="card overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="text-left px-4 py-2 text-gray-500 font-medium">Time</th>
+                  <th className="text-left px-4 py-2 text-gray-500 font-medium">Dir</th>
+                  <th className="text-left px-4 py-2 text-gray-500 font-medium">Phone</th>
+                  <th className="text-left px-4 py-2 text-gray-500 font-medium">User</th>
+                  <th className="text-left px-4 py-2 text-gray-500 font-medium">Type</th>
+                  <th className="text-left px-4 py-2 text-gray-500 font-medium">Message</th>
+                  <th className="text-left px-4 py-2 text-gray-500 font-medium">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {logs.map((l, i) => (
+                  <tr key={i} className="border-t hover:bg-gray-50">
+                    <td className="px-4 py-2 text-gray-400 text-xs whitespace-nowrap">{fmtTime(l.createdAt)}</td>
+                    <td className="px-4 py-2"><DirectionBadge direction={l.direction} /></td>
+                    <td className="px-4 py-2 font-mono text-xs">{l.phone}</td>
+                    <td className="px-4 py-2 text-gray-600 text-xs">{l.userName || "—"}</td>
+                    <td className="px-4 py-2 text-gray-500 text-xs">{l.messageType}</td>
+                    <td className="px-4 py-2 text-gray-700 max-w-xs truncate">{l.message || l.templateName || "—"}</td>
+                    <td className="px-4 py-2">
+                      <span className={`text-xs px-1.5 py-0.5 rounded-full ${l.status === "delivered" || l.status === "read" ? "bg-green-100 text-green-700" : l.status === "failed" ? "bg-red-100 text-red-600" : "bg-gray-100 text-gray-500"}`}>
+                        {l.status || "—"}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between px-4 py-3 border-t">
+              <p className="text-xs text-gray-500">{fmt(total)} total records</p>
+              <div className="flex gap-2">
+                <button className="btn-secondary text-xs" disabled={page === 1} onClick={() => setPage(p => p - 1)}>Previous</button>
+                <span className="text-xs text-gray-600 px-2 py-1">{page} / {totalPages}</span>
+                <button className="btn-secondary text-xs" disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}>Next</button>
+              </div>
             </div>
-          ))}
+          )}
+        </div>
+      }
+    </div>
+  );
+}
+
+// ─── Bot Flow Panel ───────────────────────────────────────────────────────────
+
+function BotFlowPanel() {
+  const buyerCommands = [
+    { cmd: "Hi / Hello", desc: "Welcome message with menu options" },
+    { cmd: "Products / Browse", desc: "Browse available products" },
+    { cmd: "Orders", desc: "View your recent orders" },
+    { cmd: "Help", desc: "Show available commands" },
+    { cmd: "Quote", desc: "Request a price quote" },
+    { cmd: "Stop", desc: "Opt out of WhatsApp messages" },
+  ];
+  const sellerCommands = [
+    { cmd: "Hi / Hello", desc: "Welcome message with seller dashboard link" },
+    { cmd: "Orders", desc: "View incoming orders" },
+    { cmd: "Enquiries", desc: "View pending enquiries" },
+    { cmd: "Help", desc: "Show seller commands" },
+    { cmd: "Stats", desc: "Sales summary" },
+    { cmd: "Stop", desc: "Opt out of WhatsApp messages" },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <h2 className="text-lg font-semibold text-gray-800">Bot Reference</h2>
+      <div className="card p-4 flex items-start gap-3 bg-purple-50 border-purple-200">
+        <FiZap size={15} className="text-purple-500 mt-0.5 flex-shrink-0" />
+        <div className="text-sm text-purple-700">
+          <p className="font-medium mb-1">Auto-Reply Priority Order</p>
+          <ol className="list-decimal list-inside space-y-0.5 text-xs">
+            <li>Opt-out commands (STOP, UNSUBSCRIBE)</li>
+            <li>Keyword-matched auto_reply campaigns (ordered by priority)</li>
+            <li>Bot flow commands (role-based)</li>
+            <li>Default fallback reply</li>
+          </ol>
         </div>
       </div>
-
-      <div className="card p-5 md:col-span-2">
-        <h3 className="font-semibold text-gray-800 mb-3">📋 Complete Order Flow (All via WhatsApp)</h3>
-        <div className="flex flex-wrap gap-2 items-center text-sm">
-          {[
-            '1. Customer inquires on website',
-            '→ Seller notified on WhatsApp',
-            '→ Seller replies via WhatsApp',
-            '→ Buyer replies via WhatsApp',
-            '→ Seller sends QUOTE 5000',
-            '→ Buyer receives quotation',
-            '→ Buyer sends ACCEPT',
-            '→ Order auto-created',
-            '→ Buyer sends PAID PM-xxx',
-            '→ Seller notified of payment',
-            '→ Seller sends DISPATCH PM-xxx TRK123',
-            '→ Buyer gets tracking info',
-            '→ Seller sends DELIVER PM-xxx',
-            '✅ Order complete',
-          ].map((step, i) => (
-            <span key={i} className={`px-2 py-1 rounded text-xs ${step.startsWith('→') ? 'bg-gray-100 text-gray-600' : step.startsWith('✅') ? 'bg-green-100 text-green-700 font-medium' : 'bg-blue-50 text-blue-700 font-medium'}`}>
-              {step}
-            </span>
-          ))}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="card overflow-hidden">
+          <div className="px-4 py-3 border-b bg-blue-50 flex items-center gap-2">
+            <FiUsers size={15} className="text-blue-600" />
+            <h3 className="font-semibold text-blue-800">Buyer Commands</h3>
+          </div>
+          <table className="w-full text-sm">
+            <tbody>
+              {buyerCommands.map((c, i) => (
+                <tr key={i} className="border-t hover:bg-gray-50">
+                  <td className="px-4 py-2 font-mono text-xs text-blue-700 font-medium">{c.cmd}</td>
+                  <td className="px-4 py-2 text-gray-600">{c.desc}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="card overflow-hidden">
+          <div className="px-4 py-3 border-b bg-green-50 flex items-center gap-2">
+            <FiActivity size={15} className="text-green-600" />
+            <h3 className="font-semibold text-green-800">Seller Commands</h3>
+          </div>
+          <table className="w-full text-sm">
+            <tbody>
+              {sellerCommands.map((c, i) => (
+                <tr key={i} className="border-t hover:bg-gray-50">
+                  <td className="px-4 py-2 font-mono text-xs text-green-700 font-medium">{c.cmd}</td>
+                  <td className="px-4 py-2 text-gray-600">{c.desc}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
@@ -525,46 +1088,67 @@ function BotFlowPanel() {
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
-export default function WhatsAppAdmin() {
-  const [tab, setTab] = useState('stats');
 
-  const tabs = [
-    { id: 'stats', label: '📊 Analytics' },
-    { id: 'conversations', label: '💬 Conversations' },
-    { id: 'broadcast', label: '📣 Broadcast' },
-    { id: 'direct', label: '✉️ Direct Message' },
-    { id: 'logs', label: '📋 Message Logs' },
-    { id: 'flow', label: '🤖 Bot Commands' },
-  ];
+const TABS = [
+  { id: "analytics", label: "Analytics", icon: FiActivity },
+  { id: "inbox", label: "Inbox", icon: FiMessageSquare },
+  { id: "window", label: "24h Window", icon: FiClock },
+  { id: "campaigns", label: "Campaigns", icon: FiZap },
+  { id: "broadcast", label: "Broadcast", icon: FiRadio },
+  { id: "direct", label: "Direct Send", icon: FiSend },
+  { id: "templates", label: "Templates", icon: FiSettings },
+  { id: "optouts", label: "Opt-Outs", icon: FiXCircle },
+  { id: "logs", label: "Logs", icon: FiActivity },
+  { id: "botref", label: "Bot Ref", icon: FiZap },
+];
+
+export default function WhatsAppAdmin() {
+  const [activeTab, setActiveTab] = useState("analytics");
+
+  const renderPanel = () => {
+    switch (activeTab) {
+      case "analytics": return <StatsPanel />;
+      case "inbox": return <ConversationsPanel />;
+      case "window": return <WindowPanel />;
+      case "campaigns": return <CampaignsPanel />;
+      case "broadcast": return <BroadcastPanel />;
+      case "direct": return <DirectMessagePanel />;
+      case "templates": return <TemplatesPanel />;
+      case "optouts": return <OptOutPanel />;
+      case "logs": return <LogsPanel />;
+      case "botref": return <BotFlowPanel />;
+      default: return null;
+    }
+  };
 
   return (
-    <div>
-      <div className="flex items-center gap-3 mb-6">
-        <div className="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center">
-          <svg viewBox="0 0 24 24" className="w-6 h-6 fill-white">
-            <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347"/>
-          </svg>
-        </div>
-        <div>
-          <h1 className="text-xl font-bold text-gray-800">WhatsApp Admin</h1>
-          <p className="text-sm text-gray-500">Manage WhatsApp bot, conversations, and broadcasts</p>
+    <div className="space-y-4">
+      <div className="flex items-center gap-3">
+        <FiMessageSquare size={22} className="text-green-600" />
+        <h1 className="text-xl font-bold text-gray-800">WhatsApp Admin</h1>
+      </div>
+
+      <div className="overflow-x-auto -mx-1 px-1">
+        <div className="flex gap-1 min-w-max border-b">
+          {TABS.map(tab => {
+            const Icon = tab.icon;
+            const active = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center gap-2 px-3 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap -mb-px ${active ? "border-green-500 text-green-700" : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"}`}
+              >
+                <Icon size={14} /> {tab.label}
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      <div className="border-b mb-6 flex flex-wrap gap-1">
-        {tabs.map((t) => (
-          <TabButton key={t.id} active={tab === t.id} onClick={() => setTab(t.id)}>
-            {t.label}
-          </TabButton>
-        ))}
+      <div className="min-h-96">
+        {renderPanel()}
       </div>
-
-      {tab === 'stats' && <StatsPanel />}
-      {tab === 'conversations' && <ConversationsPanel />}
-      {tab === 'broadcast' && <BroadcastPanel />}
-      {tab === 'direct' && <DirectMessagePanel />}
-      {tab === 'logs' && <LogsPanel />}
-      {tab === 'flow' && <BotFlowPanel />}
     </div>
   );
 }

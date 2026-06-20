@@ -445,13 +445,7 @@ const handleUnknownUser = async (phone, text, session) => {
       session.state = 'reg_role';
       session.context = {};
       await session.save();
-      return wa.sendTextMessage(phone,
-        `👋 Welcome to *PrintMart*!\n\n` +
-        `Register as:\n` +
-        `1️⃣ *BUYER* – Browse & purchase products\n` +
-        `2️⃣ *SELLER* – List & sell your products\n\n` +
-        `Reply *1* or *BUYER* / *2* or *SELLER*`
-      );
+      return wa.sendTemplateMessage(phone, 'welcome_print', 'en_US', []);
     }
     // Default unknown user message
     return wa.sendTextMessage(phone,

@@ -94,7 +94,7 @@ const handleBuyerMessage = async (phone, user, text, interactiveId, session) => 
         `1. Login to your account\n` +
         `2. Complete your business profile\n` +
         `3. Add your products/services\n\n` +
-        `🔗 ${process.env.CLIENT_URL || 'https://app.instify.in'}/login\n\n` +
+        `🔗 ${process.env.CLIENT_URL || 'https://shop.instify.in'}/login\n\n` +
         `Reply *MENU* to see your new seller commands.`,
         user._id
       );
@@ -462,7 +462,7 @@ const handleUnknownUser = async (phone, text, session, interactiveId) => {
       `👋 Welcome to *PrintMart*!\n\n` +
       `You don't have an account yet.\n\n` +
       `📝 To register, reply *REGISTER*\n` +
-      `🌐 Or sign up at: ${process.env.CLIENT_URL || 'https://print-mart.vercel.app'}/register`
+      `🌐 Or sign up at: ${process.env.CLIENT_URL || 'https://shop.instify.in'}/register`
     );
   }
 
@@ -505,7 +505,7 @@ const handleUnknownUser = async (phone, text, session, interactiveId) => {
       await session.save();
       return wa.sendTextMessage(phone,
         `⚠️ This mobile number is already registered.\n\n` +
-        `🔑 Login at: ${process.env.CLIENT_URL || 'https://print-mart.vercel.app'}/login\n\n` +
+        `🔑 Login at: ${process.env.CLIENT_URL || 'https://shop.instify.in'}/login\n\n` +
         `Forgot password? Reply *RESET*`
       );
     }
@@ -529,7 +529,7 @@ const handleUnknownUser = async (phone, text, session, interactiveId) => {
       session.context = {};
       await session.save();
 
-      const loginUrl = `${process.env.CLIENT_URL || 'https://print-mart.vercel.app'}/login`;
+      const loginUrl = `${process.env.CLIENT_URL || 'https://shop.instify.in'}/login`;
 
       await wa.sendTextMessage(phone,
         `✅ *Account Created Successfully!*\n\n` +
@@ -606,7 +606,7 @@ const handleUnknownUser = async (phone, text, session, interactiveId) => {
     session.context = {};
     await session.save();
     return wa.sendTextMessage(phone,
-      `To reset your password, visit:\n${process.env.CLIENT_URL || 'https://app.instify.in'}/forgot-password`
+      `To reset your password, visit:\n${process.env.CLIENT_URL || 'https://shop.instify.in'}/forgot-password`
     );
   }
 
@@ -750,7 +750,7 @@ const webhookReceive = async (req, res) => {
           try {
             const upperText = text?.trim().toUpperCase();
             const generateTempPwd = () => String(Math.floor(1000000 + Math.random() * 9000000));
-            const loginUrl = process.env.CLIENT_URL || 'https://app.instify.in';
+            const loginUrl = process.env.CLIENT_URL || 'https://shop.instify.in';
 
             // REGISTER — already registered: reset & send temp password
             if (['REGISTER', 'JOIN', 'SIGNUP', 'NEW ACCOUNT', 'START'].includes(upperText) && user) {

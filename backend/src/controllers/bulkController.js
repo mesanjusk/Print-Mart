@@ -91,7 +91,7 @@ const bulkImportSellers = asyncHandler(async (req, res) => {
           `Your admin will confirm your account shortly.\n` +
           `🔐 Verification Code: *${otp}*\n\n` +
           `Share this code with your PrintMart admin to activate your account.\n\n` +
-          `🔗 Login: ${process.env.CLIENT_URL || 'https://app.instify.in'}/login`
+          `🔗 Login: ${process.env.CLIENT_URL || 'https://shop.instify.in'}/login`
         ).catch(() => {});
         results.created.push({ email: s.email, name: s.name, otpSent: true });
       } else {
@@ -121,7 +121,7 @@ const confirmSellerOTP = asyncHandler(async (req, res) => {
     await wa.sendTextMessage(user.phone,
       `✅ *Account Activated!*\n\n` +
       `Your PrintMart seller account is now active, ${user.name}!\n\n` +
-      `🔗 Login: ${process.env.CLIENT_URL || 'https://app.instify.in'}/login\n\n` +
+      `🔗 Login: ${process.env.CLIENT_URL || 'https://shop.instify.in'}/login\n\n` +
       `Reply *MENU* to get started.`
     ).catch(() => {});
   }
@@ -164,7 +164,7 @@ const addSingleSeller = asyncHandler(async (req, res) => {
       `🔑 Temp Password: *${tempPassword}*\n\n` +
       `🔐 Verification Code: *${otp}*\n\n` +
       `Share this code with your PrintMart admin to activate your account.\n\n` +
-      `🔗 Login: ${process.env.CLIENT_URL || 'https://app.instify.in'}/login`
+      `🔗 Login: ${process.env.CLIENT_URL || 'https://shop.instify.in'}/login`
     ).catch(() => {});
   }
   res.status(201).json({ message: 'Seller created', email, tempPassword, otpSent: !!cleanPhone });

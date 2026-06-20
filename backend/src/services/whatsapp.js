@@ -408,7 +408,7 @@ const sendMorningDigest = async (sellerPhone, sellerName, pendingCount, offerCou
     `📬 *Pending Leads:* ${pendingCount}\n` +
     `🔥 *Active Offers:* ${offerCount}\n\n` +
     `Log in to respond and grow your business!\n` +
-    `👉 https://app.instify.in/dashboard/inquiries`;
+    `👉 https://shop.instify.in/dashboard/inquiries`;
   return sendTextMessage(sellerPhone, body);
 };
 const verifyWebhook = (mode, token, challenge) => {

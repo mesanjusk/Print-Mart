@@ -482,45 +482,32 @@ const handleUnknownUser = async (phone, text, session) => {
     if (!name || name.length < 2) {
       return wa.sendTextMessage(phone, `Please enter a valid full name (at least 2 characters).`);
     }
-    session.state = 'reg_email';
-    session.context = { ...ctx, name };
-    await session.save();
-    return wa.sendTextMessage(phone, `Nice to meet you, *${name}*! 😊\n\nPlease enter your *email address*:`);
-  }
 
-  // Step 3: email
-  if (state === 'reg_email') {
-    const email = text?.trim().toLowerCase();
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      return wa.sendTextMessage(phone, `❌ That doesn't look like a valid email.\n\nPlease enter a valid *email address*:`);
-    }
-
-    // Check if email already exists
-    const existing = await User.findOne({ email });
+    // Check if phone already registered
+    const normalizedPhone = phone.replace(/\D/g, '');
+    const existing = await User.findOne({ phone: normalizedPhone });
     if (existing) {
       session.state = 'idle';
       session.context = {};
       await session.save();
       return wa.sendTextMessage(phone,
-        `⚠️ This email is already registered.\n\n` +
+        `⚠️ This mobile number is already registered.\n\n` +
         `🔑 Login at: ${process.env.CLIENT_URL || 'https://print-mart.vercel.app'}/login\n\n` +
         `Forgot password? Reply *RESET*`
       );
     }
 
-    // Create account
+    // Create account immediately — no email needed
     const tempPassword = generateTempPassword();
-    const { name, role } = ctx;
+    const { role } = ctx;
 
     try {
       const user = await User.create({
         name,
-        email,
         password: tempPassword,
-        phone: `+${phone}`,
+        phone: normalizedPhone,
         role,
-        isVerified: true, // WhatsApp verified
+        isVerified: true,
       });
 
       session.userId = user._id;
@@ -535,14 +522,14 @@ const handleUnknownUser = async (phone, text, session) => {
         `✅ *Account Created Successfully!*\n\n` +
         `📋 *Your Login Details:*\n` +
         `👤 Name: ${name}\n` +
-        `📧 Email: ${email}\n` +
+        `📱 Mobile: +${phone}\n` +
         `🔑 Temp Password: *${tempPassword}*\n\n` +
         `🔗 Login here: ${loginUrl}\n\n` +
         `⚠️ *Important:* Please change your password after first login.\n\n` +
-        `After login, complete your profile to activate your full account.`
+        `After login, add your email in profile for important notifications.`
       );
 
-      console.log(`[WA-Register] New ${role} account created: ${email} (${name}) from ${phone}`);
+      console.log(`[WA-Register] New ${role} account created: ${name} from +${phone}`);
     } catch (err) {
       console.error('[WA-Register] Error creating account:', err.message);
       session.state = 'idle';

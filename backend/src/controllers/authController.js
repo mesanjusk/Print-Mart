@@ -23,45 +23,67 @@ const dispatchPasswordReset = async (user, emailToken, otp) => {
 const register = asyncHandler(async (req, res) => {
   const { name, email, password, role, phone, businessName } = req.body;
 
-  if (await User.findOne({ email: email?.toLowerCase() })) {
+  if (!phone) { res.status(400); throw new Error('Mobile number is required'); }
+
+  const normalizedPhone = phone.replace(/\D/g, '');
+  if (await User.findOne({ phone: normalizedPhone })) {
+    res.status(400); throw new Error('Mobile number already registered');
+  }
+  if (email && await User.findOne({ email: email.toLowerCase() })) {
     res.status(400); throw new Error('Email already registered');
   }
 
   const allowedRoles = ['buyer', 'seller'];
   const safeRole = allowedRoles.includes(role) ? role : 'buyer';
 
-  const emailToken = crypto.randomBytes(32).toString('hex');
-  const otp = generateOTP();
-
   const user = await User.create({
-    name, email, password, role: safeRole, phone, businessName,
-    emailVerifyToken: emailToken,
-    emailVerifyExpire: new Date(Date.now() + 24 * 60 * 60 * 1000),
-    otpCode: otp,
-    otpPurpose: 'verify_email',
-    otpExpire: new Date(Date.now() + 10 * 60 * 1000),
+    name,
+    email: email ? email.toLowerCase() : undefined,
+    password,
+    role: safeRole,
+    phone: normalizedPhone,
+    businessName,
+    isVerified: true,
   });
 
-  dispatchVerification(user, emailToken, otp);
+  if (email) {
+    const emailToken = crypto.randomBytes(32).toString('hex');
+    const otp = generateOTP();
+    user.emailVerifyToken = emailToken;
+    user.emailVerifyExpire = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    user.otpCode = otp;
+    user.otpPurpose = 'verify_email';
+    user.otpExpire = new Date(Date.now() + 10 * 60 * 1000);
+    await user.save();
+    dispatchVerification(user, emailToken, otp);
+  }
 
   res.status(201).json({
     _id: user._id,
     name: user.name,
     email: user.email,
+    phone: user.phone,
     role: user.role,
     isVerified: user.isVerified,
     token: generateToken(user._id),
-    message: 'Account created. Check your email or WhatsApp to verify.',
+    message: 'Account created successfully.',
   });
 });
 
 // POST /api/auth/login
 const login = asyncHandler(async (req, res) => {
-  const { email, password } = req.body;
-  const user = await User.findOne({ email: email?.toLowerCase() });
+  const { phone, email, password } = req.body;
+
+  let user;
+  if (phone) {
+    const normalizedPhone = phone.replace(/\D/g, '');
+    user = await User.findOne({ phone: normalizedPhone });
+  } else if (email) {
+    user = await User.findOne({ email: email.toLowerCase() });
+  }
 
   if (!user || !(await user.matchPassword(password))) {
-    res.status(401); throw new Error('Invalid email or password');
+    res.status(401); throw new Error('Invalid mobile number or password');
   }
   if (!user.isActive) {
     res.status(403); throw new Error('Your account has been disabled. Contact support.');
@@ -182,11 +204,16 @@ const resendVerification = asyncHandler(async (req, res) => {
 
 // POST /api/auth/forgot-password
 const forgotPassword = asyncHandler(async (req, res) => {
-  const { email } = req.body;
-  if (!email) { res.status(400); throw new Error('Email is required'); }
+  const { phone, email } = req.body;
+  if (!phone && !email) { res.status(400); throw new Error('Mobile number is required'); }
 
-  const user = await User.findOne({ email: email.toLowerCase() });
-  if (!user) return res.json({ message: 'If this email exists, a reset link has been sent.' });
+  let user;
+  if (phone) {
+    user = await User.findOne({ phone: phone.replace(/\D/g, '') });
+  } else {
+    user = await User.findOne({ email: email.toLowerCase() });
+  }
+  if (!user) return res.json({ message: 'If this number exists, a reset OTP has been sent.' });
 
   const emailToken = crypto.randomBytes(32).toString('hex');
   const otp = generateOTP();

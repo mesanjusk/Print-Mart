@@ -7,14 +7,14 @@ import WhatsAppRegisterQR from '../components/common/WhatsAppRegisterQR';
 export default function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
-  const [form, setForm] = useState({ email: '', password: '' });
+  const [form, setForm] = useState({ phone: '', password: '' });
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     try {
-      await login(form.email, form.password);
+      await login(form.phone, form.password);
       toast.success('Welcome back!');
       navigate('/dashboard');
     } catch (err) {
@@ -37,10 +37,10 @@ export default function LoginPage() {
         <div className="card p-8">
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-              <input type="email" required value={form.email}
-                onChange={(e) => setForm({ ...form, email: e.target.value })}
-                className="input" placeholder="you@example.com" />
+              <label className="block text-sm font-medium text-gray-700 mb-1">Mobile Number</label>
+              <input type="tel" required value={form.phone}
+                onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                className="input" placeholder="9876543210" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>

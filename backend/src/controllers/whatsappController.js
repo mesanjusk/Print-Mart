@@ -386,14 +386,146 @@ const handleSellerMessage = async (phone, user, text, interactiveId) => {
 
 // ─── Unknown user flow ────────────────────────────────────────────────────────
 
-const handleUnknownUser = async (phone, text) => {
-  const body =
-    `👋 Welcome to *PrintMart*!\n\n` +
-    `We couldn't find your phone number in our system.\n\n` +
-    `Please register at our website to start using WhatsApp services:\n` +
-    `🌐 printmart.in\n\n` +
-    `Once registered, reply *MENU* to get started.`;
-  return wa.sendTextMessage(phone, body);
+// ─── WhatsApp Registration Flow ──────────────────────────────────────────────
+
+const generateTempPassword = () => String(Math.floor(1000000 + Math.random() * 9000000)); // 7 digits
+
+const handleUnknownUser = async (phone, text, session) => {
+  const cmd = text?.trim().toUpperCase();
+  const state = session?.state || 'idle';
+  const ctx = session?.context || {};
+
+  // Entry points
+  if (state === 'idle' || !state.startsWith('reg_')) {
+    if (['REGISTER', 'JOIN', 'SIGNUP', 'NEW ACCOUNT', 'START'].includes(cmd)) {
+      session.state = 'reg_role';
+      session.context = {};
+      await session.save();
+      return wa.sendTextMessage(phone,
+        `👋 Welcome to *PrintMart*!\n\n` +
+        `Register as:\n` +
+        `1️⃣ *BUYER* – Browse & purchase products\n` +
+        `2️⃣ *SELLER* – List & sell your products\n\n` +
+        `Reply *1* or *BUYER* / *2* or *SELLER*`
+      );
+    }
+    // Default unknown user message
+    return wa.sendTextMessage(phone,
+      `👋 Welcome to *PrintMart*!\n\n` +
+      `You don't have an account yet.\n\n` +
+      `📝 To register, reply *REGISTER*\n` +
+      `🌐 Or sign up at: ${process.env.CLIENT_URL || 'https://print-mart.vercel.app'}/register`
+    );
+  }
+
+  // Step 1: choose role
+  if (state === 'reg_role') {
+    let role = null;
+    if (['1', 'BUYER'].includes(cmd)) role = 'buyer';
+    if (['2', 'SELLER'].includes(cmd)) role = 'seller';
+    if (!role) {
+      return wa.sendTextMessage(phone, `Please reply *1* for Buyer or *2* for Seller.`);
+    }
+    session.state = 'reg_name';
+    session.context = { role };
+    await session.save();
+    return wa.sendTextMessage(phone, `Great! You chose *${role.toUpperCase()}*.\n\nPlease enter your *full name*:`);
+  }
+
+  // Step 2: name
+  if (state === 'reg_name') {
+    const name = text?.trim();
+    if (!name || name.length < 2) {
+      return wa.sendTextMessage(phone, `Please enter a valid full name (at least 2 characters).`);
+    }
+    session.state = 'reg_email';
+    session.context = { ...ctx, name };
+    await session.save();
+    return wa.sendTextMessage(phone, `Nice to meet you, *${name}*! 😊\n\nPlease enter your *email address*:`);
+  }
+
+  // Step 3: email
+  if (state === 'reg_email') {
+    const email = text?.trim().toLowerCase();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return wa.sendTextMessage(phone, `❌ That doesn't look like a valid email.\n\nPlease enter a valid *email address*:`);
+    }
+
+    // Check if email already exists
+    const existing = await User.findOne({ email });
+    if (existing) {
+      session.state = 'idle';
+      session.context = {};
+      await session.save();
+      return wa.sendTextMessage(phone,
+        `⚠️ This email is already registered.\n\n` +
+        `🔑 Login at: ${process.env.CLIENT_URL || 'https://print-mart.vercel.app'}/login\n\n` +
+        `Forgot password? Reply *RESET*`
+      );
+    }
+
+    // Create account
+    const tempPassword = generateTempPassword();
+    const { name, role } = ctx;
+
+    try {
+      const user = await User.create({
+        name,
+        email,
+        password: tempPassword,
+        phone: `+${phone}`,
+        role,
+        isVerified: true, // WhatsApp verified
+      });
+
+      session.userId = user._id;
+      session.role = role;
+      session.state = 'idle';
+      session.context = {};
+      await session.save();
+
+      const loginUrl = `${process.env.CLIENT_URL || 'https://print-mart.vercel.app'}/login`;
+
+      await wa.sendTextMessage(phone,
+        `✅ *Account Created Successfully!*\n\n` +
+        `📋 *Your Login Details:*\n` +
+        `👤 Name: ${name}\n` +
+        `📧 Email: ${email}\n` +
+        `🔑 Temp Password: *${tempPassword}*\n\n` +
+        `🔗 Login here: ${loginUrl}\n\n` +
+        `⚠️ *Important:* Please change your password after first login.\n\n` +
+        `After login, complete your profile to activate your full account.`
+      );
+
+      console.log(`[WA-Register] New ${role} account created: ${email} (${name}) from ${phone}`);
+    } catch (err) {
+      console.error('[WA-Register] Error creating account:', err.message);
+      session.state = 'idle';
+      session.context = {};
+      await session.save();
+      return wa.sendTextMessage(phone, `❌ Something went wrong. Please try again or register at our website.`);
+    }
+    return;
+  }
+
+  // Reset flow
+  if (cmd === 'RESET') {
+    session.state = 'idle';
+    session.context = {};
+    await session.save();
+    return wa.sendTextMessage(phone,
+      `To reset your password, visit:\n${process.env.CLIENT_URL || 'https://print-mart.vercel.app'}/forgot-password`
+    );
+  }
+
+  // Fallback
+  session.state = 'idle';
+  session.context = {};
+  await session.save();
+  return wa.sendTextMessage(phone,
+    `👋 Welcome to *PrintMart*!\n\nReply *REGISTER* to create a new account.`
+  );
 };
 
 // ─── Helper: find quotation ───────────────────────────────────────────────────
@@ -513,7 +645,7 @@ const webhookReceive = async (req, res) => {
         if (!handledByAutoReply) {
           try {
             if (!user) {
-              await handleUnknownUser(from, text);
+              await handleUnknownUser(from, text, session);
             } else if (user.role === 'seller' || user.role === 'admin') {
               await handleSellerMessage(from, user, text, interactiveId);
             } else {

@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { authAPI } from '../services/api';
 import toast from 'react-hot-toast';
+import WhatsAppRegisterQR from '../components/common/WhatsAppRegisterQR';
 
 export default function RegisterPage() {
   const { register } = useAuth();
@@ -174,6 +175,8 @@ export default function RegisterPage() {
               </div>
             </form>
           )}
+        <div className="mt-5">
+          <WhatsAppRegisterQR />
         </div>
       </div>
     </div>

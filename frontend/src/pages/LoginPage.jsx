@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
+import WhatsAppRegisterQR from '../components/common/WhatsAppRegisterQR';
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -60,6 +61,10 @@ export default function LoginPage() {
             Don't have an account?{' '}
             <Link to="/register" className="text-green-600 hover:text-green-700 font-medium">Register</Link>
           </p>
+          <div className="mt-4 pt-4 border-t border-gray-100 text-center">
+            <p className="text-xs text-gray-400 mb-2">Or register instantly via WhatsApp</p>
+            <WhatsAppRegisterQR compact />
+          </div>
         </div>
       </div>
     </div>

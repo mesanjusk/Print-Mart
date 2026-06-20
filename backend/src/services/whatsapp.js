@@ -210,7 +210,9 @@ const sendHelpSeller = async (phone, userId) => {
     `  e.g.  DISPATCH PM-2024-0001 DTDC-TRK789\n` +
     `*DELIVER [order]* – Mark as delivered\n` +
     `  e.g.  DELIVER PM-2024-0001\n` +
-    `*ORDERS* – Active orders summary\n\n` +
+    `*ORDERS* – Active orders summary\n` +
+    `*BUYER* – Info on browsing & buying as a seller\n` +
+    `*RESET* – Get a new temporary password\n\n` +
     `Or just reply to this chat to respond to an inquiry.`;
   return sendTextMessage(phone, body, userId);
 };

@@ -645,29 +645,51 @@ const webhookReceive = async (req, res) => {
         if (!handledByAutoReply) {
           try {
             const upperText = text?.trim().toUpperCase();
-            // REGISTER — intercept for already-registered users
+            const generateTempPwd = () => String(Math.floor(1000000 + Math.random() * 9000000));
+            const loginUrl = process.env.CLIENT_URL || 'https://app.instify.in';
+
+            // REGISTER — already registered: reset & send temp password
             if (['REGISTER', 'JOIN', 'SIGNUP', 'NEW ACCOUNT', 'START'].includes(upperText) && user) {
+              const tempPassword = generateTempPwd();
+              user.password = tempPassword;
+              await user.save();
               await wa.sendTextMessage(from,
-                `👋 You already have a *PrintMart* account!\n\n` +
+                `👋 Welcome back, *${user.name}*!\n\n` +
+                `You already have a PrintMart account.\n\n` +
                 `📧 Email: ${user.email}\n` +
-                `👤 Role: ${user.role}\n\n` +
-                `🔑 Login at: ${process.env.CLIENT_URL || 'https://app.instify.in'}/login\n\n` +
-                `Reply *MENU* to see available commands.`
+                `👤 Role: ${user.role}\n` +
+                `🔑 Temp Password: *${tempPassword}*\n\n` +
+                `🔗 Login: ${loginUrl}/login\n\n` +
+                `⚠️ Change your password after login.\n` +
+                `Reply *MENU* after logging in.`
               );
-            // RESET — password reset via WhatsApp for existing users
+
+            // RESET — password reset for existing users
             } else if (upperText === 'RESET' && user) {
-              const crypto = require('crypto');
-              const generateOTP = () => String(Math.floor(1000000 + Math.random() * 9000000));
-              const tempPassword = generateOTP();
+              const tempPassword = generateTempPwd();
               user.password = tempPassword;
               await user.save();
               await wa.sendTextMessage(from,
                 `🔑 *Password Reset*\n\n` +
-                `Your new temporary password is:\n\n` +
+                `Your new temporary password:\n\n` +
                 `*${tempPassword}*\n\n` +
-                `🔗 Login at: ${process.env.CLIENT_URL || 'https://app.instify.in'}/login\n\n` +
-                `⚠️ Please change your password after logging in via Profile settings.`
+                `🔗 Login: ${loginUrl}/login\n\n` +
+                `⚠️ Change your password after login via Profile settings.`
               );
+
+            // BUYER — seller requesting buyer mode
+            } else if (upperText === 'BUYER' && user?.role === 'seller') {
+              await wa.sendTextMessage(from,
+                `🛒 *Buyer Mode*\n\n` +
+                `As a seller on PrintMart, you can also browse and inquire about products as a buyer.\n\n` +
+                `Visit the app to:\n` +
+                `• Browse products\n` +
+                `• Send inquiries to other sellers\n` +
+                `• Compare prices\n\n` +
+                `🔗 ${loginUrl}/products\n\n` +
+                `Your seller dashboard remains active. Reply *MENU* for seller commands.`
+              );
+
             } else if (!user || session.state?.startsWith('reg_')) {
               await handleUnknownUser(from, text, session);
             } else if (user.role === 'seller' || user.role === 'admin') {

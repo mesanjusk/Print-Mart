@@ -23,6 +23,8 @@ const userSchema = new mongoose.Schema({
   // Seller plan: only 'premium' sellers receive lead broadcasts
   plan: { type: String, enum: ['free', 'premium'], default: 'free' },
   planActivatedAt: { type: Date },
+  // Sellers can also act as buyers (browse + inquire on other sellers' products)
+  canBuyAlso: { type: Boolean, default: true },
   lastSeenAt: { type: Date },
   morningDigestOptIn: { type: Boolean, default: false },
   // PWA push notification subscription

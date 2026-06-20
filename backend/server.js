@@ -49,6 +49,7 @@ app.use('/api/quotations', require('./src/routes/quotationRoutes'));
 app.use('/api/orders', require('./src/routes/orderRoutes'));
 app.use('/api/whatsapp', require('./src/routes/whatsappRoutes'));
 app.use('/api/admin/whatsapp', require('./src/routes/whatsappAdminRoutes'));
+app.use('/api/admin/bulk', require('./src/routes/bulkRoutes'));
 app.use('/api/designs', require('./src/routes/designRoutes'));
 app.use('/api/offers', require('./src/routes/offerRoutes'));
 app.use('/api/push', require('./src/routes/pushRoutes'));

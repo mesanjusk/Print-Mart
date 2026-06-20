@@ -16,6 +16,7 @@ import MyOrders from '../components/dashboard/MyOrders';
 import WhatsAppAdmin from '../components/dashboard/WhatsAppAdmin';
 import DesignLibrary from '../components/dashboard/DesignLibrary';
 import AdminUsers from '../components/dashboard/AdminUsers';
+import AdminBulk from '../components/dashboard/AdminBulk';
 
 const linkCls = ({ isActive }) =>
   `flex items-center gap-2 px-3 py-2 rounded text-sm font-medium transition-colors ${
@@ -89,6 +90,7 @@ export default function DashboardPage() {
                     WhatsApp Admin
                   </NavLink>
                   <NavLink to="/dashboard/all-orders" className={linkCls}><FiShoppingBag /> All Orders</NavLink>
+                  <NavLink to="/dashboard/bulk-import" className={linkCls}><FiUsers /> Bulk Import</NavLink>
                 </>
               )}
             </nav>
@@ -118,6 +120,7 @@ export default function DashboardPage() {
                 <Route path="admin/users" element={<AdminUsers />} />
                 <Route path="whatsapp-admin" element={<WhatsAppAdmin />} />
                 <Route path="all-orders" element={<ManageOrders />} />
+                <Route path="bulk-import" element={<AdminBulk />} />
               </>
             )}
           </Routes>

@@ -459,10 +459,12 @@ const handleUnknownUser = async (phone, text, session, interactiveId) => {
 
   // Step 1: choose role
   if (state === 'reg_role') {
-    console.log(`[WA-Reg] reg_role cmd="${cmd}" interactiveId="${interactiveId}" text="${text}"`);
+    // interactiveId may be raw JSON if extraction failed — search it too
+    const searchStr = (cmd + ' ' + (interactiveId || '')).toUpperCase();
+    console.log(`[WA-Reg] reg_role cmd="${cmd}" searchStr="${searchStr}"`);
     let role = null;
-    if (cmd === '1' || cmd.includes('BUYER')) role = 'buyer';
-    if (cmd === '2' || cmd.includes('SELLER')) role = 'seller';
+    if (cmd === '1' || searchStr.includes('BUYER')) role = 'buyer';
+    if (cmd === '2' || searchStr.includes('SELLER')) role = 'seller';
     if (!role) {
       // Re-send the approved template instead of plain text
       return wa.sendTemplateMessage(phone, 'welcome_print', 'en_US', []);
@@ -658,6 +660,8 @@ const webhookReceive = async (req, res) => {
           text = msg.text?.body || '';
         } else if (msgType === 'interactive') {
           const iType = msg.interactive?.type;
+          // Log the full raw interactive payload so we can see exactly what Meta sends
+          console.log(`[WA-Bot] Interactive msg type="${iType}" raw:`, JSON.stringify(msg.interactive));
           if (iType === 'button_reply') {
             interactiveId = msg.interactive.button_reply?.id || '';
             text = msg.interactive.button_reply?.title || '';
@@ -665,18 +669,17 @@ const webhookReceive = async (req, res) => {
             interactiveId = msg.interactive.list_reply?.id || '';
             text = msg.interactive.list_reply?.title || '';
           } else if (iType === 'button') {
-            // Template quick-reply button: try all possible field names
             interactiveId = msg.interactive.button?.payload || msg.interactive.button?.id || '';
             text = msg.interactive.button?.text || msg.interactive.button?.title || interactiveId || '';
           } else {
-            // Unknown interactive type — log and attempt extraction
-            console.log('[WA-Bot] Unknown interactive type:', iType, JSON.stringify(msg.interactive));
+            // Unknown type — still process; use raw JSON as interactiveId fallback
             interactiveId = JSON.stringify(msg.interactive);
             text = '';
           }
         }
 
-        if (!text && !interactiveId) continue;
+        // Always process interactive messages even if text extraction failed
+        if (!text && !interactiveId && msgType !== 'interactive') continue;
 
         console.log(`[WA-Bot] Message from ${from} [${msgType}]: ${text || interactiveId}`);
 

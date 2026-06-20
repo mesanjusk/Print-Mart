@@ -499,14 +499,16 @@ const handleUnknownUser = async (phone, text, session, interactiveId) => {
       return wa.sendTextMessage(phone, `Please enter a valid full name (at least 2 characters).`);
     }
 
-    // Check if phone already registered — try both +91... and 91... formats
+    // Match phone in ANY stored format by searching last 10 digits as regex
     const digitsOnly = phone.replace(/\D/g, '');
-    const withPlus = `+${digitsOnly}`;
-    const existing = await User.findOne({ phone: { $in: [digitsOnly, withPlus] } });
+    const withPlus   = `+${digitsOnly}`;
+    const last10     = digitsOnly.slice(-10);
+    const existing   = await User.findOne({ phone: { $regex: last10 } });
+    console.log(`[WA-Register] Phone check last10="${last10}" found=${!!existing} storedPhone=${existing?.phone}`);
     if (existing) {
       session.state = 'idle';
       session.context = {};
-    session.markModified('context');
+      session.markModified('context');
       await session.save();
       return wa.sendTextMessage(phone,
         `⚠️ This mobile number is already registered.\n\n` +
@@ -515,15 +517,16 @@ const handleUnknownUser = async (phone, text, session, interactiveId) => {
       );
     }
 
-    // Create account immediately — no email needed
+    // Create account — role comes from session context saved in previous step
     const tempPassword = generateTempPassword();
-    const { role } = ctx;
+    const role = ctx?.role || 'buyer';
+    console.log(`[WA-Register] Creating user name="${name}" phone="${withPlus}" role="${role}"`);
 
     try {
       const user = await User.create({
         name,
         password: tempPassword,
-        phone: withPlus,   // store consistently as +919XXXXXXXXX
+        phone: withPlus,
         role,
         isVerified: true,
       });

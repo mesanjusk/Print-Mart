@@ -496,9 +496,10 @@ const handleUnknownUser = async (phone, text, session, interactiveId) => {
       return wa.sendTextMessage(phone, `Please enter a valid full name (at least 2 characters).`);
     }
 
-    // Check if phone already registered
-    const normalizedPhone = phone.replace(/\D/g, '');
-    const existing = await User.findOne({ phone: normalizedPhone });
+    // Check if phone already registered — try both +91... and 91... formats
+    const digitsOnly = phone.replace(/\D/g, '');
+    const withPlus = `+${digitsOnly}`;
+    const existing = await User.findOne({ phone: { $in: [digitsOnly, withPlus] } });
     if (existing) {
       session.state = 'idle';
       session.context = {};
@@ -518,7 +519,7 @@ const handleUnknownUser = async (phone, text, session, interactiveId) => {
       const user = await User.create({
         name,
         password: tempPassword,
-        phone: normalizedPhone,
+        phone: withPlus,   // store consistently as +919XXXXXXXXX
         role,
         isVerified: true,
       });
@@ -535,14 +536,14 @@ const handleUnknownUser = async (phone, text, session, interactiveId) => {
         `✅ *Account Created Successfully!*\n\n` +
         `📋 *Your Login Details:*\n` +
         `👤 Name: ${name}\n` +
-        `📱 Mobile: +${phone}\n` +
+        `📱 Mobile: ${withPlus}\n` +
         `🔑 Temp Password: *${tempPassword}*\n\n` +
         `🔗 Login here: ${loginUrl}\n\n` +
         `⚠️ *Important:* Please change your password after first login.\n\n` +
         `After login, add your email in profile for important notifications.`
       );
 
-      console.log(`[WA-Register] New ${role} account created: ${name} from +${phone}`);
+      console.log(`[WA-Register] New ${role} account created: ${name} from ${withPlus}`);
     } catch (err) {
       console.error('[WA-Register] Error creating account:', err.message);
       session.state = 'idle';

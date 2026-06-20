@@ -446,7 +446,16 @@ const handleUnknownUser = async (phone, text, session, interactiveId) => {
       session.state = 'reg_role';
       session.context = {};
       await session.save();
-      return wa.sendTemplateMessage(phone, 'welcome_print', 'en_US', []);
+      // Send the approved template first, then an interactive button message.
+      // Template quick-reply clicks don't trigger webhooks; interactive buttons do.
+      await wa.sendTemplateMessage(phone, 'welcome_print', 'en_US', []);
+      return wa.sendButtonMessage(phone,
+        'Choose your account type:',
+        [
+          { id: 'BUYER', title: 'Buyer' },
+          { id: 'SELLER', title: 'Seller' },
+        ]
+      );
     }
     // Default unknown user message
     return wa.sendTextMessage(phone,
@@ -466,8 +475,13 @@ const handleUnknownUser = async (phone, text, session, interactiveId) => {
     if (cmd === '1' || searchStr.includes('BUYER')) role = 'buyer';
     if (cmd === '2' || searchStr.includes('SELLER')) role = 'seller';
     if (!role) {
-      // Re-send the approved template instead of plain text
-      return wa.sendTemplateMessage(phone, 'welcome_print', 'en_US', []);
+      return wa.sendButtonMessage(phone,
+        'Please choose your account type:',
+        [
+          { id: 'BUYER', title: 'Buyer' },
+          { id: 'SELLER', title: 'Seller' },
+        ]
+      );
     }
     session.state = 'reg_name';
     session.context = { role };

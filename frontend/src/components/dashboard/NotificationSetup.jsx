@@ -78,7 +78,7 @@ export default function NotificationSetup() {
     }
   };
 
-  if (status === 'unsupported' || status === 'checking') return null;
+  if (status === 'unsupported' || status === 'checking' || !VAPID_PUBLIC_KEY) return null;
 
   if (status === 'subscribed') {
     return (

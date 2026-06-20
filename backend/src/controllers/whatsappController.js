@@ -429,6 +429,7 @@ const handleUnknownUser = async (phone, text, session, interactiveId) => {
     if (['INQUIRE', 'INQUIRY', 'ENQUIRE', 'ENQUIRY', 'QUOTE', 'PRICE'].includes(cmd)) {
       session.state = 'guest_inquiry';
       session.context = {};
+    session.markModified('context');
       await session.save();
       return wa.sendTextMessage(phone,
         `📩 *Send an Inquiry – No Registration Needed!*\n\n` +
@@ -445,6 +446,7 @@ const handleUnknownUser = async (phone, text, session, interactiveId) => {
     if (['REGISTER', 'JOIN', 'SIGNUP', 'NEW ACCOUNT', 'START'].includes(cmd)) {
       session.state = 'reg_role';
       session.context = {};
+    session.markModified('context');
       await session.save();
       // Send the approved template first, then an interactive button message.
       // Template quick-reply clicks don't trigger webhooks; interactive buttons do.
@@ -485,6 +487,7 @@ const handleUnknownUser = async (phone, text, session, interactiveId) => {
     }
     session.state = 'reg_name';
     session.context = { role };
+    session.markModified('context');  // required for Mongoose Mixed type
     await session.save();
     return wa.sendTextMessage(phone, `Great! You chose *${role.toUpperCase()}*.\n\nPlease enter your *full name*:`);
   }
@@ -503,6 +506,7 @@ const handleUnknownUser = async (phone, text, session, interactiveId) => {
     if (existing) {
       session.state = 'idle';
       session.context = {};
+    session.markModified('context');
       await session.save();
       return wa.sendTextMessage(phone,
         `⚠️ This mobile number is already registered.\n\n` +
@@ -528,6 +532,7 @@ const handleUnknownUser = async (phone, text, session, interactiveId) => {
       session.role = role;
       session.state = 'idle';
       session.context = {};
+    session.markModified('context');
       await session.save();
 
       const loginUrl = `${process.env.CLIENT_URL || 'https://shop.instify.in'}/login`;
@@ -545,10 +550,18 @@ const handleUnknownUser = async (phone, text, session, interactiveId) => {
 
       console.log(`[WA-Register] New ${role} account created: ${name} from ${withPlus}`);
     } catch (err) {
-      console.error('[WA-Register] Error creating account:', err.message);
+      console.error('[WA-Register] Error creating account:', err.code, err.message);
       session.state = 'idle';
       session.context = {};
+      session.markModified('context');
       await session.save();
+      if (err.code === 11000) {
+        return wa.sendTextMessage(phone,
+          `⚠️ This mobile number is already registered.\n\n` +
+          `🔑 Login at: ${process.env.CLIENT_URL || 'https://shop.instify.in'}/login\n\n` +
+          `Forgot password? Reply *RESET*`
+        );
+      }
       return wa.sendTextMessage(phone, `❌ Something went wrong. Please try again or register at our website.`);
     }
     return;
@@ -577,6 +590,7 @@ const handleUnknownUser = async (phone, text, session, interactiveId) => {
 
     session.state = 'idle';
     session.context = {};
+    session.markModified('context');
     await session.save();
 
     // Notify admin via WhatsApp
@@ -605,6 +619,7 @@ const handleUnknownUser = async (phone, text, session, interactiveId) => {
   if (cmd === 'RESET') {
     session.state = 'idle';
     session.context = {};
+    session.markModified('context');
     await session.save();
     return wa.sendTextMessage(phone,
       `To reset your password, visit:\n${process.env.CLIENT_URL || 'https://shop.instify.in'}/forgot-password`
@@ -614,6 +629,7 @@ const handleUnknownUser = async (phone, text, session, interactiveId) => {
   // Fallback
   session.state = 'idle';
   session.context = {};
+    session.markModified('context');
   await session.save();
   return wa.sendTextMessage(phone,
     `👋 Welcome to *PrintMart*!\n\n` +

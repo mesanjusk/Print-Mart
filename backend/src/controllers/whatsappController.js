@@ -459,9 +459,10 @@ const handleUnknownUser = async (phone, text, session, interactiveId) => {
 
   // Step 1: choose role
   if (state === 'reg_role') {
+    console.log(`[WA-Reg] reg_role cmd="${cmd}" interactiveId="${interactiveId}" text="${text}"`);
     let role = null;
-    if (['1', 'BUYER'].includes(cmd)) role = 'buyer';
-    if (['2', 'SELLER'].includes(cmd)) role = 'seller';
+    if (cmd === '1' || cmd.includes('BUYER')) role = 'buyer';
+    if (cmd === '2' || cmd.includes('SELLER')) role = 'seller';
     if (!role) {
       // Re-send the approved template instead of plain text
       return wa.sendTemplateMessage(phone, 'welcome_print', 'en_US', []);
@@ -658,16 +659,20 @@ const webhookReceive = async (req, res) => {
         } else if (msgType === 'interactive') {
           const iType = msg.interactive?.type;
           if (iType === 'button_reply') {
-            // Interactive message quick-reply buttons
             interactiveId = msg.interactive.button_reply?.id || '';
             text = msg.interactive.button_reply?.title || '';
           } else if (iType === 'list_reply') {
             interactiveId = msg.interactive.list_reply?.id || '';
             text = msg.interactive.list_reply?.title || '';
           } else if (iType === 'button') {
-            // Template quick-reply button clicks use a different format
-            interactiveId = msg.interactive.button?.payload || '';
-            text = msg.interactive.button?.text || '';
+            // Template quick-reply button: try all possible field names
+            interactiveId = msg.interactive.button?.payload || msg.interactive.button?.id || '';
+            text = msg.interactive.button?.text || msg.interactive.button?.title || interactiveId || '';
+          } else {
+            // Unknown interactive type — log and attempt extraction
+            console.log('[WA-Bot] Unknown interactive type:', iType, JSON.stringify(msg.interactive));
+            interactiveId = JSON.stringify(msg.interactive);
+            text = '';
           }
         }
 

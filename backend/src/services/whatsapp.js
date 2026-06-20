@@ -408,11 +408,13 @@ const sendMorningDigest = async (sellerPhone, sellerName, pendingCount, offerCou
   return sendTextMessage(sellerPhone, body);
 };
 const verifyWebhook = (mode, token, challenge) => {
-  if (!VERIFY_TOKEN) {
+  const verifyToken = process.env.WHATSAPP_VERIFY_TOKEN;
+  console.log('[WA-Webhook] mode:', mode, '| received token:', token, '| expected:', verifyToken);
+  if (!verifyToken) {
     console.warn('[WhatsApp] WHATSAPP_VERIFY_TOKEN not set.');
     return null;
   }
-  if (mode === 'subscribe' && token === VERIFY_TOKEN) return challenge;
+  if (mode === 'subscribe' && token === verifyToken) return challenge;
   return null;
 };
 

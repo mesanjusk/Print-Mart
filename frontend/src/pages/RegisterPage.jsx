@@ -175,6 +175,7 @@ export default function RegisterPage() {
               </div>
             </form>
           )}
+        </div>
         <div className="mt-5">
           <WhatsAppRegisterQR />
         </div>

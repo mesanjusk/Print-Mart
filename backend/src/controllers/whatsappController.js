@@ -644,7 +644,17 @@ const webhookReceive = async (req, res) => {
 
         if (!handledByAutoReply) {
           try {
-            if (!user) {
+            const upperText = text?.trim().toUpperCase();
+            // REGISTER command — intercept for all users
+            if (['REGISTER', 'JOIN', 'SIGNUP', 'NEW ACCOUNT', 'START'].includes(upperText) && user) {
+              await wa.sendTextMessage(from,
+                `👋 You already have a *PrintMart* account!\n\n` +
+                `📧 Email: ${user.email}\n` +
+                `👤 Role: ${user.role}\n\n` +
+                `🔑 Login at: ${process.env.CLIENT_URL || 'https://print-mart.vercel.app'}/login\n\n` +
+                `Reply *MENU* to see available commands.`
+              );
+            } else if (!user || session.state?.startsWith('reg_')) {
               await handleUnknownUser(from, text, session);
             } else if (user.role === 'seller' || user.role === 'admin') {
               await handleSellerMessage(from, user, text, interactiveId);

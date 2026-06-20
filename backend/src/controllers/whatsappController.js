@@ -463,7 +463,8 @@ const handleUnknownUser = async (phone, text, session, interactiveId) => {
     if (['1', 'BUYER'].includes(cmd)) role = 'buyer';
     if (['2', 'SELLER'].includes(cmd)) role = 'seller';
     if (!role) {
-      return wa.sendTextMessage(phone, `Please reply *1* for Buyer or *2* for Seller.`);
+      // Re-send the approved template instead of plain text
+      return wa.sendTemplateMessage(phone, 'welcome_print', 'en_US', []);
     }
     session.state = 'reg_name';
     session.context = { role };

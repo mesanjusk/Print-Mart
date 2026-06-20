@@ -26,7 +26,7 @@ const linkCls = ({ isActive }) =>
 export default function DashboardPage() {
   const { user } = useAuth();
   const isSeller = user?.role === 'seller';
-  const isAdmin = user?.role === 'admin';
+  const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
   const isBuyer = user?.role === 'buyer';
 
   return (

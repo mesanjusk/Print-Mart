@@ -645,14 +645,28 @@ const webhookReceive = async (req, res) => {
         if (!handledByAutoReply) {
           try {
             const upperText = text?.trim().toUpperCase();
-            // REGISTER command — intercept for all users
+            // REGISTER — intercept for already-registered users
             if (['REGISTER', 'JOIN', 'SIGNUP', 'NEW ACCOUNT', 'START'].includes(upperText) && user) {
               await wa.sendTextMessage(from,
                 `👋 You already have a *PrintMart* account!\n\n` +
                 `📧 Email: ${user.email}\n` +
                 `👤 Role: ${user.role}\n\n` +
-                `🔑 Login at: ${process.env.CLIENT_URL || 'https://print-mart.vercel.app'}/login\n\n` +
+                `🔑 Login at: ${process.env.CLIENT_URL || 'https://app.instify.in'}/login\n\n` +
                 `Reply *MENU* to see available commands.`
+              );
+            // RESET — password reset via WhatsApp for existing users
+            } else if (upperText === 'RESET' && user) {
+              const crypto = require('crypto');
+              const generateOTP = () => String(Math.floor(1000000 + Math.random() * 9000000));
+              const tempPassword = generateOTP();
+              user.password = tempPassword;
+              await user.save();
+              await wa.sendTextMessage(from,
+                `🔑 *Password Reset*\n\n` +
+                `Your new temporary password is:\n\n` +
+                `*${tempPassword}*\n\n` +
+                `🔗 Login at: ${process.env.CLIENT_URL || 'https://app.instify.in'}/login\n\n` +
+                `⚠️ Please change your password after logging in via Profile settings.`
               );
             } else if (!user || session.state?.startsWith('reg_')) {
               await handleUnknownUser(from, text, session);

@@ -1,26 +1,9 @@
-import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { authAPI } from '../services/api';
-import toast from 'react-hot-toast';
+
+const WA_NUMBER = import.meta.env.VITE_WA_BUSINESS_NUMBER || '919370195000';
+const WA_LINK = `https://wa.me/${WA_NUMBER}?text=RESET`;
 
 export default function ForgotPasswordPage() {
-  const [email, setEmail] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState(null); // { hasWhatsApp }
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    try {
-      const { data } = await authAPI.forgotPassword(email);
-      setResult(data);
-    } catch {
-      toast.error('Something went wrong. Try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4 py-12">
       <div className="max-w-md w-full">
@@ -29,55 +12,46 @@ export default function ForgotPasswordPage() {
             <span className="text-white font-bold text-xl">PM</span>
           </div>
           <h1 className="text-2xl font-bold text-gray-800">Forgot Password</h1>
-          <p className="text-gray-500 text-sm mt-1">We'll send a reset link to your email and OTP to WhatsApp</p>
+          <p className="text-gray-500 text-sm mt-1">Reset your password via WhatsApp</p>
         </div>
-        <div className="card p-8">
-          {result ? (
-            <div className="text-center space-y-4">
-              <div className="space-y-2">
-                <div className="flex items-center gap-3 bg-blue-50 rounded-lg px-4 py-3 text-sm">
-                  <span className="text-xl">📧</span>
-                  <p className="text-blue-800 text-left">
-                    A <strong>reset link</strong> has been sent to your email (valid 1 hour).
-                  </p>
-                </div>
-                {result.hasWhatsApp && (
-                  <div className="flex items-center gap-3 bg-green-50 rounded-lg px-4 py-3 text-sm">
-                    <span className="text-xl">📱</span>
-                    <p className="text-green-800 text-left">
-                      A <strong>6-digit OTP</strong> has been sent to your WhatsApp (valid 10 minutes).
-                    </p>
-                  </div>
-                )}
-              </div>
-              <div className="pt-2 space-y-2">
-                <Link to="/reset-password" className="block text-center btn-primary py-2.5">
-                  Use Email Link
-                </Link>
-                {result.hasWhatsApp && (
-                  <Link to="/reset-password?method=otp" className="block text-center border border-green-600 text-green-700 rounded-lg py-2.5 text-sm font-medium hover:bg-green-50 transition-colors">
-                    Use WhatsApp OTP
-                  </Link>
-                )}
-              </div>
-              <Link to="/login" className="text-green-600 hover:text-green-700 font-medium text-sm block">Back to Login</Link>
-            </div>
-          ) : (
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
-                <input type="email" required value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="input" placeholder="you@example.com" />
-              </div>
-              <button type="submit" disabled={loading} className="btn-primary w-full py-2.5 text-base">
-                {loading ? 'Sending...' : 'Send Reset Link & OTP'}
-              </button>
-              <p className="text-center text-sm text-gray-500">
-                <Link to="/login" className="text-green-600 hover:text-green-700 font-medium">Back to Login</Link>
-              </p>
-            </form>
-          )}
+
+        <div className="card p-8 text-center space-y-5">
+          <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto">
+            <svg viewBox="0 0 24 24" className="w-9 h-9 fill-green-600">
+              <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347"/>
+            </svg>
+          </div>
+
+          <div>
+            <h2 className="text-lg font-semibold text-gray-800 mb-1">Reset via WhatsApp</h2>
+            <p className="text-sm text-gray-500">
+              Send <strong>RESET</strong> to our WhatsApp number and we'll guide you through resetting your password in the chat.
+            </p>
+          </div>
+
+          <a
+            href={WA_LINK}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white font-medium px-5 py-3 rounded-lg transition-colors w-full"
+          >
+            <svg viewBox="0 0 24 24" className="w-5 h-5 fill-white">
+              <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347"/>
+            </svg>
+            Open WhatsApp to Reset Password
+          </a>
+
+          <div className="bg-gray-50 rounded-lg px-4 py-3 text-left space-y-1.5 text-xs text-gray-500">
+            <p className="font-medium text-gray-600">How it works:</p>
+            <p>1. Tap the button above to open WhatsApp</p>
+            <p>2. Send <strong>RESET</strong> in the chat</p>
+            <p>3. Follow the steps — you'll get a new temporary password</p>
+            <p>4. Login and change your password from profile settings</p>
+          </div>
+
+          <Link to="/login" className="block text-sm text-green-600 hover:text-green-700 font-medium">
+            ← Back to Login
+          </Link>
         </div>
       </div>
     </div>

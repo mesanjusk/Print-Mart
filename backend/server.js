@@ -57,6 +57,27 @@ app.get('/', (req, res) => {
   res.json({ message: 'PrintMart API is running', status: 'ok' });
 });
 
+// One-time campaign seed
+app.post('/api/seed-campaign', async (req, res) => {
+  try {
+    const WhatsAppCampaign = require('./src/models/WhatsAppCampaign');
+    const { keyword = 'hi', reply = 'test', name = 'Hi Auto-Reply' } = req.body;
+    const existing = await WhatsAppCampaign.findOne({ name });
+    if (existing) return res.json({ message: 'Campaign already exists', campaign: existing });
+    const campaign = await WhatsAppCampaign.create({
+      name,
+      type: 'auto_reply',
+      status: 'active',
+      trigger: { keywords: [keyword.toLowerCase()], matchType: 'exact', roles: ['any'] },
+      response: { messageType: 'text', content: reply },
+      respectOptOut: true,
+    });
+    res.json({ message: 'Campaign created', campaign });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // One-time admin bootstrap
 // If no admin exists yet → allowed without secret (first-run mode)
 // If admin already exists → requires ADMIN_SEED_SECRET env var

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Routes, Route, Link, useNavigate, useParams } from 'react-router-dom';
-import { FiEdit2, FiTrash2, FiPlus, FiEye } from 'react-icons/fi';
+import { FiEdit2, FiTrash2, FiPlus, FiEye, FiX } from 'react-icons/fi';
 import { productAPI, categoryAPI } from '../../services/api';
 import Spinner from '../common/Spinner';
 import toast from 'react-hot-toast';
@@ -69,10 +69,65 @@ function ProductList() {
   );
 }
 
+function AddCategoryModal({ onClose, onAdded }) {
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [icon, setIcon] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    if (!name.trim()) { toast.error('Category name is required'); return; }
+    setSaving(true);
+    try {
+      const res = await categoryAPI.create({ name: name.trim(), description: description.trim(), icon: icon.trim() });
+      toast.success(`Category "${res.data.name}" added`);
+      onAdded(res.data);
+      onClose();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to add category');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <div className="card p-6 max-w-sm w-full">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-semibold text-gray-800">Add New Category</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><FiX size={18} /></button>
+        </div>
+        <div className="space-y-3">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
+            <input value={name} onChange={(e) => setName(e.target.value)} className="input" placeholder="e.g. Business Cards" autoFocus
+              onKeyDown={(e) => e.key === 'Enter' && handleSave()} />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Description <span className="text-gray-400">(optional)</span></label>
+            <input value={description} onChange={(e) => setDescription(e.target.value)} className="input" placeholder="Brief description" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Icon <span className="text-gray-400">(emoji, optional)</span></label>
+            <input value={icon} onChange={(e) => setIcon(e.target.value)} className="input" placeholder="e.g. 🖨️" />
+          </div>
+        </div>
+        <div className="flex gap-2 mt-5">
+          <button onClick={handleSave} disabled={saving} className="btn-primary flex-1">
+            {saving ? 'Adding...' : 'Add Category'}
+          </button>
+          <button onClick={onClose} className="btn-outline flex-1">Cancel</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ProductForm({ editId }) {
   const navigate = useNavigate();
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [showCatModal, setShowCatModal] = useState(false);
   const [form, setForm] = useState({
     name: '', description: '', category: '', brand: '',
     priceMin: '', priceMax: '', priceUnit: 'piece', minOrderQty: 1,
@@ -82,6 +137,8 @@ function ProductForm({ editId }) {
   const [printSpecs, setPrintSpecs] = useState({
     paperWeight: '', size: '', finish: '', quantity: '', sides: '', deliveryDays: '', material: '',
   });
+
+  const sortedCategories = [...categories].sort((a, b) => a.name.localeCompare(b.name));
 
   useEffect(() => {
     categoryAPI.getAll().then((r) => setCategories(r.data));
@@ -156,11 +213,28 @@ function ProductForm({ editId }) {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Category *</label>
-            <select name="category" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} required className="input">
-              <option value="">Select category</option>
-              {categories.map((c) => <option key={c._id} value={c._id}>{c.name}</option>)}
-            </select>
+            <div className="flex gap-2">
+              <select name="category" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} required className="input flex-1">
+                <option value="">Select category</option>
+                {sortedCategories.map((c) => (
+                  <option key={c._id} value={c._id}>{c.icon ? `${c.icon} ` : ''}{c.name}</option>
+                ))}
+              </select>
+              <button type="button" onClick={() => setShowCatModal(true)}
+                className="px-3 py-2 border border-green-500 text-green-600 rounded-lg text-sm font-medium hover:bg-green-50 whitespace-nowrap">
+                + New
+              </button>
+            </div>
           </div>
+          {showCatModal && (
+            <AddCategoryModal
+              onClose={() => setShowCatModal(false)}
+              onAdded={(newCat) => {
+                setCategories((prev) => [...prev, newCat]);
+                setForm((f) => ({ ...f, category: newCat._id }));
+              }}
+            />
+          )}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Description *</label>
             <textarea name="description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} required rows={4} className="input resize-none" />

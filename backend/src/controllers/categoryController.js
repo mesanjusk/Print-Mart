@@ -3,7 +3,7 @@ const Category = require('../models/Category');
 
 const getCategories = asyncHandler(async (req, res) => {
   const categories = await Category.find({ isActive: true, parent: null })
-    .sort({ order: 1 })
+    .sort({ name: 1 })
     .lean();
   const withSubs = await Promise.all(
     categories.map(async (cat) => {

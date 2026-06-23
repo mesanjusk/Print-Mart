@@ -235,13 +235,17 @@ const sendInquiryNotificationToSeller = async (sellerPhone, buyerName, productNa
   return sendTextMessage(sellerPhone, body, userId);
 };
 
-const sendInquiryConfirmationToBuyer = async (buyerPhone, productName, sellerBusiness, userId) => {
+const sendInquiryConfirmationToBuyer = async (buyerPhone, productName, sellerBusiness, userId, sellerPhone) => {
   if (!buyerPhone) return null;
+  const cleanSeller = sellerPhone ? sellerPhone.replace(/\D/g, '') : null;
   const body =
     `✅ *Inquiry Submitted – PrintMart*\n\n` +
     `Your inquiry for *${productName}* has been sent to *${sellerBusiness}*.\n\n` +
-    `You will receive a WhatsApp notification when the seller responds.\n\n` +
-    `Reply to this chat to add more details to your inquiry.`;
+    (cleanSeller
+      ? `📞 *Contact seller directly on WhatsApp:*\n💬 wa.me/${cleanSeller}\n\n`
+      : ``) +
+    `You will also receive a message here when the seller responds.\n\n` +
+    `Reply *STATUS* to check your inquiry status.`;
   return sendTextMessage(buyerPhone, body, userId);
 };
 

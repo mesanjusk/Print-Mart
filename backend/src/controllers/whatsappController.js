@@ -604,12 +604,28 @@ const handleUnknownUser = async (phone, text, interactiveId, session) => {
       );
 
       if (sellers.length > 0) {
+        // Send seller contacts to the guest
         await wa.sendTextMessage(phone, `📋 We found *${sellers.length}* seller(s) for *${product}* on PrintMart:`);
         for (const s of sellers) {
           const cleanPhone = s.phone.replace(/\D/g, '');
           await wa.sendTextMessage(phone,
             `🏪 *${s.businessName || s.name}*\n📞 ${s.phone}\n💬 wa.me/${cleanPhone}`
           );
+        }
+
+        // Notify each matching seller about this guest inquiry
+        const guestClean = phone.replace(/\D/g, '');
+        for (const s of sellers) {
+          await wa.sendTextMessage(s.phone,
+            `🔔 *New Guest Inquiry – PrintMart*\n\n` +
+            `📦 Product: *${product}*\n` +
+            `📊 Quantity: *${qty}*\n` +
+            `👤 Name: *${guestName}*\n` +
+            `📱 WhatsApp: wa.me/${guestClean}\n\n` +
+            `Contact this buyer directly on WhatsApp to send your quote!\n` +
+            `Reply *STATUS* to see all your inquiries.`,
+            s._id
+          ).catch(() => {});
         }
       }
     } catch (sellerLookupErr) {

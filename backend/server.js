@@ -135,6 +135,34 @@ app.post('/api/seed-admin', async (req, res) => {
 // ── TEMPORARY superadmin setup page — DELETE after use ──────────────────────
 const SETUP_PATH = '/setup/pm-root-4f8d2a1c';
 
+// Direct endpoint — bypasses the "superadmin already exists" guard
+// Protected only by the secret URL; remove this whole block after use
+app.post(SETUP_PATH + '/create', async (req, res) => {
+  try {
+    const User = require('./src/models/User');
+    const generateToken = require('./src/utils/generateToken');
+    const { name, email, password, phone } = req.body;
+    if (!email || !password || password.length < 6) {
+      return res.status(400).json({ message: 'Email and password (min 6 chars) are required.' });
+    }
+    let user = await User.findOne({ email });
+    if (user) {
+      user.name = name || user.name;
+      user.role = 'superadmin';
+      user.isVerified = true;
+      user.isActive = true;
+      if (phone) user.phone = phone;
+      user.password = password;
+      await user.save();
+      return res.json({ message: 'User promoted to superadmin', email: user.email, role: user.role, token: generateToken(user._id) });
+    }
+    user = await User.create({ name: name || 'Super Admin', email, password, phone, role: 'superadmin', isVerified: true, isActive: true });
+    res.status(201).json({ message: 'Superadmin created successfully', email: user.email, role: user.role, token: generateToken(user._id) });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 app.get(SETUP_PATH, (req, res) => {
   res.setHeader('Content-Type', 'text/html');
   res.send(`<!DOCTYPE html>
@@ -170,7 +198,7 @@ app.get(SETUP_PATH, (req, res) => {
 <body>
 <div class="card">
   <h1>Superadmin Setup</h1>
-  <p class="sub">One-time bootstrap — create the root admin account.</p>
+  <p class="sub">Create or overwrite the superadmin account.</p>
   <form id="form">
     <label>Full Name</label>
     <input id="name" type="text" placeholder="Super Admin" value="Super Admin" required/>
@@ -192,7 +220,7 @@ app.get(SETUP_PATH, (req, res) => {
     btn.disabled = true; btn.textContent = 'Creating…';
     msg.style.display = 'none';
     try {
-      const r = await fetch('/api/seed-admin', {
+      const r = await fetch('/setup/pm-root-4f8d2a1c/create', {
         method: 'POST',
         headers: {'Content-Type':'application/json'},
         body: JSON.stringify({

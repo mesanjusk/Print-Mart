@@ -10,6 +10,10 @@ const {
   getWindowStatus, getTemplates, syncTemplatesFromMeta,
 } = require('../controllers/whatsappAdminController');
 
+const {
+  getCommands, createCommand, updateCommand, deleteCommand, resetToDefault,
+} = require('../controllers/botCommandController');
+
 const adminOnly = [protect, authorize('admin')];
 
 router.get('/stats', ...adminOnly, getStats);
@@ -31,5 +35,12 @@ router.delete('/optouts/:id', ...adminOnly, removeOptOut);
 router.get('/window-status', ...adminOnly, getWindowStatus);
 router.get('/templates', ...adminOnly, getTemplates);
 router.post('/templates/sync', ...adminOnly, syncTemplatesFromMeta);
+
+// Bot Commands (CMS for WhatsApp bot responses)
+router.get('/bot-commands', ...adminOnly, getCommands);
+router.post('/bot-commands', ...adminOnly, createCommand);
+router.put('/bot-commands/:id', ...adminOnly, updateCommand);
+router.delete('/bot-commands/:id', ...adminOnly, deleteCommand);
+router.post('/bot-commands/:id/reset', ...adminOnly, resetToDefault);
 
 module.exports = router;

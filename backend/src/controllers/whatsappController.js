@@ -4,6 +4,7 @@ const Quotation = require('../models/Quotation');
 const Order = require('../models/Order');
 const WhatsAppSession = require('../models/WhatsAppSession');
 const WhatsAppLog = require('../models/WhatsAppLog');
+const BotCommand = require('../models/BotCommand');
 const wa = require('../services/whatsapp');
 
 // ─── Webhook verification ────────────────────────────────────────────────────
@@ -106,11 +107,11 @@ const handleBuyerMessage = async (phone, user, text, interactiveId, session) => 
   }
 
   if (cmd.cmd === 'MENU') {
-    return wa.sendWelcomeBuyer(phone, user.name, user._id);
+    return useBotCmd('buyer_welcome', phone, () => wa.sendWelcomeBuyer(phone, user.name, user._id), { userId: user._id, name: user.name });
   }
 
   if (cmd.cmd === 'HELP') {
-    return wa.sendHelpBuyer(phone, user._id);
+    return useBotCmd('buyer_help', phone, () => wa.sendHelpBuyer(phone, user._id), { userId: user._id });
   }
 
   if (cmd.cmd === 'STATUS') {
@@ -258,19 +259,18 @@ const handleBuyerMessage = async (phone, user, text, interactiveId, session) => 
     return;
   }
 
-  // Default: reply to most recent open inquiry
+  // Default: forward typed text to most recent open inquiry as a reply
   const inquiry = await Inquiry.findOne({ buyer: user._id, status: { $in: ['pending', 'responded'] } })
     .sort({ createdAt: -1 }).populate('seller', 'name phone');
-  if (inquiry) {
+  if (inquiry && !interactiveId) {
     inquiry.replies.push({ sender: user._id, message: text });
     await inquiry.save();
-    // Notify seller of buyer reply
     if (inquiry.seller?.phone) {
       await wa.sendInquiryReplyToUser(inquiry.seller.phone, user.name, text, inquiry.seller._id);
     }
     return wa.sendTextMessage(phone, `✅ Your reply has been sent to the vendor.`, user._id);
   }
-  return wa.sendWelcomeBuyer(phone, user.name, user._id);
+  return useBotCmd('buyer_welcome', phone, () => wa.sendWelcomeBuyer(phone, user.name, user._id), { userId: user._id, name: user.name });
 };
 
 // ─── Seller flows ─────────────────────────────────────────────────────────────
@@ -279,11 +279,11 @@ const handleSellerMessage = async (phone, user, text, interactiveId) => {
   const cmd = interactiveId ? { cmd: interactiveId.toUpperCase() } : parseCommand(text);
 
   if (cmd.cmd === 'MENU') {
-    return wa.sendWelcomeSeller(phone, user.name, user._id);
+    return useBotCmd('seller_welcome', phone, () => wa.sendWelcomeSeller(phone, user.name, user._id), { userId: user._id, name: user.name });
   }
 
   if (cmd.cmd === 'HELP') {
-    return wa.sendHelpSeller(phone, user._id);
+    return useBotCmd('seller_help', phone, () => wa.sendHelpSeller(phone, user._id), { userId: user._id });
   }
 
   if (cmd.cmd === 'STATUS') {
@@ -396,10 +396,10 @@ const handleSellerMessage = async (phone, user, text, interactiveId) => {
     return;
   }
 
-  // Default: reply to most recent open inquiry
+  // Default: forward typed text to most recent open inquiry as a reply
   const inquiry = await Inquiry.findOne({ seller: user._id, status: { $in: ['pending', 'responded'] } })
     .sort({ createdAt: -1 }).populate('buyer', 'name phone');
-  if (inquiry) {
+  if (inquiry && !interactiveId) {
     inquiry.replies.push({ sender: user._id, message: text });
     inquiry.status = 'responded';
     await inquiry.save();
@@ -408,7 +408,7 @@ const handleSellerMessage = async (phone, user, text, interactiveId) => {
     }
     return wa.sendTextMessage(phone, `✅ Reply sent to ${inquiry.buyer?.name || 'buyer'}.`, user._id);
   }
-  return wa.sendWelcomeSeller(phone, user.name, user._id);
+  return useBotCmd('seller_welcome', phone, () => wa.sendWelcomeSeller(phone, user.name, user._id), { userId: user._id, name: user.name });
 };
 
 // ─── Unknown user flow ────────────────────────────────────────────────────────
@@ -417,117 +417,206 @@ const handleSellerMessage = async (phone, user, text, interactiveId) => {
 
 const generateTempPassword = () => String(Math.floor(1000000 + Math.random() * 9000000)); // 7 digits
 
-const handleUnknownUser = async (phone, text, session, interactiveId) => {
-  // Resolve command from text first, then fall back to button payload
-  const cmd = (text?.trim() || interactiveId?.trim() || '').toUpperCase();
+const generateMagicLink = async (user) => {
+  const crypto = require('crypto');
+  const token = crypto.randomBytes(32).toString('hex');
+  user.magicToken = token;
+  user.magicTokenExpire = new Date(Date.now() + 30 * 60 * 1000); // 30 min
+  await user.save();
+  return `${process.env.CLIENT_URL || 'https://shop.instify.in'}/magic-login?token=${token}`;
+};
+
+const useBotCmd = async (key, phone, fallback, { userId, name } = {}) => {
+  try {
+    const cmd = await BotCommand.findOne({ key, isActive: true }).lean();
+    if (cmd?.response?.text) {
+      let text = cmd.response.text;
+      if (name) text = text.replace(/\{name\}/gi, name);
+      if (cmd.response.type === 'button' && cmd.response.buttons?.length) {
+        return wa.sendButtonMessage(phone, text, cmd.response.buttons, userId);
+      }
+      return wa.sendTextMessage(phone, text, userId);
+    }
+  } catch (e) {
+    console.error(`[BotCmd] lookup error for "${key}":`, e.message);
+  }
+  return fallback();
+};
+
+const handleUnknownUser = async (phone, text, interactiveId, session) => {
+  // interactiveId takes priority so button taps are handled correctly
+  const cmd = interactiveId ? interactiveId.toUpperCase() : text?.trim().toUpperCase();
   const state = session?.state || 'idle';
   const ctx = session?.context || {};
 
-  // Entry points
-  if (state === 'idle' || !state.startsWith('reg_')) {
-    // Guest inquiry — no registration needed
-    if (['INQUIRE', 'INQUIRY', 'ENQUIRE', 'ENQUIRY', 'QUOTE', 'PRICE'].includes(cmd)) {
-      session.state = 'guest_inquiry';
+  // ─── IDLE ─────────────────────────────────────────────────────────────────
+  if (state === 'idle') {
+    if (['INQUIRE', 'INQUIRY', 'ENQUIRE', 'ENQUIRY', 'QUOTE', 'PRICE', 'BUY', 'GET A QUOTE'].includes(cmd)) {
+      session.state = 'guest_product';
       session.context = {};
-    session.markModified('context');
       await session.save();
+      return wa.sendTextMessage(phone, `📦 *What product are you looking for?*\n\nPlease type the product name:`);
+    }
+
+    if (['REGISTER', 'JOIN', 'SIGNUP', 'NEW ACCOUNT', 'SELL', 'SELLER'].includes(cmd)) {
+      session.state = 'reg_role';
+      session.context = {};
+      await session.save();
+      return useBotCmd('guest_register_prompt', phone, () => wa.sendButtonMessage(phone, 'Choose your account type:', [
+        { id: 'BUYER', title: 'Buyer' },
+        { id: 'SELLER', title: 'Seller' },
+      ]));
+    }
+
+    if (cmd === 'HELP') {
+      return useBotCmd('guest_help', phone, () => wa.sendButtonMessage(phone,
+        `*How can we help?*\n\n• Tap *Get a Quote* to send a requirement to sellers\n• Tap *Register* to create a free account\n\n🌐 Website: ${process.env.CLIENT_URL || 'https://shop.instify.in'}\n📞 Support: +91 93701 95000`,
+        [
+          { id: 'INQUIRE', title: 'Get a Quote' },
+          { id: 'REGISTER', title: 'Register' },
+        ]
+      ));
+    }
+
+    if (cmd === 'RESET') {
       return wa.sendTextMessage(phone,
-        `📩 *Send an Inquiry – No Registration Needed!*\n\n` +
-        `Just tell us what you're looking for:\n\n` +
-        `Type your message in this format:\n` +
-        `*Product name | Quantity | Your name*\n\n` +
-        `Example:\n` +
-        `_Business Cards | 500 pcs | Rahul_\n\n` +
-        `We'll forward your inquiry to relevant sellers and they'll contact you here on WhatsApp! 📱\n\n` +
-        `💡 Register for free to track all your inquiries: reply *REGISTER*`
+        `🔑 To reset your password, visit:\n${process.env.CLIENT_URL || 'https://shop.instify.in'}/forgot-password`
       );
     }
 
-    if (['REGISTER', 'JOIN', 'SIGNUP', 'NEW ACCOUNT', 'START'].includes(cmd)) {
-      session.state = 'reg_role';
-      session.context = {};
-    session.markModified('context');
-      await session.save();
-      // Send the approved template first, then an interactive button message.
-      // Template quick-reply clicks don't trigger webhooks; interactive buttons do.
-      await wa.sendTemplateMessage(phone, 'welcome_print', 'en_US', []);
-      return wa.sendButtonMessage(phone,
-        'Choose your account type:',
-        [
-          { id: 'BUYER', title: 'Buyer' },
-          { id: 'SELLER', title: 'Seller' },
-        ]
-      );
+    return useBotCmd('main_menu', phone, () => wa.sendMainMenu(phone));
+  }
+
+  // ─── GUIDED GUEST INQUIRY ─────────────────────────────────────────────────
+
+  if (state === 'guest_product') {
+    if (['HI', 'HELLO', 'MENU', 'HEY', 'HELP'].includes(cmd)) {
+      session.state = 'idle'; session.context = {}; await session.save();
+      return useBotCmd('main_menu', phone, () => wa.sendMainMenu(phone));
     }
-    // Default unknown user message
-    return wa.sendTextMessage(phone,
-      `👋 Welcome to *PrintMart*!\n\n` +
-      `You don't have an account yet.\n\n` +
-      `📝 To register, reply *REGISTER*\n` +
-      `🌐 Or sign up at: ${process.env.CLIENT_URL || 'https://shop.instify.in'}/register`
+    const product = text?.trim();
+    if (!product || product.length < 2) {
+      return wa.sendTextMessage(phone, `Please type the product name you are looking for.`);
+    }
+    session.state = 'guest_qty';
+    session.context = { product };
+    await session.save();
+    return wa.sendTextMessage(phone, `📊 *How many pieces do you need?*\n\nEnter the quantity (e.g. 500):`);
+  }
+
+  if (state === 'guest_qty') {
+    if (['HI', 'HELLO', 'MENU', 'HEY', 'HELP'].includes(cmd)) {
+      session.state = 'idle'; session.context = {}; await session.save();
+      return useBotCmd('main_menu', phone, () => wa.sendMainMenu(phone));
+    }
+    const qty = text?.trim();
+    if (!qty) return wa.sendTextMessage(phone, `Please enter the quantity.`);
+    session.state = 'guest_name';
+    session.context = { ...ctx, qty };
+    await session.save();
+    return wa.sendTextMessage(phone, `👤 *What is your name?*\n\nSo sellers can address you properly:`);
+  }
+
+  if (state === 'guest_name') {
+    if (['HI', 'HELLO', 'MENU', 'HEY', 'HELP'].includes(cmd)) {
+      session.state = 'idle'; session.context = {}; await session.save();
+      return useBotCmd('main_menu', phone, () => wa.sendMainMenu(phone));
+    }
+    const guestName = text?.trim();
+    if (!guestName || guestName.length < 2) {
+      return wa.sendTextMessage(phone, `Please enter your name.`);
+    }
+    const { product, qty } = ctx;
+    await wa.logMessage({ direction: 'inbound', phone, messageType: 'text', message: `[GUEST INQUIRY] Product: ${product} | Qty: ${qty} | Name: ${guestName}` });
+    const adminPhone = process.env.ADMIN_WHATSAPP_PHONE;
+    if (adminPhone) {
+      await wa.sendTextMessage(adminPhone,
+        `📩 *New Guest Inquiry – PrintMart*\n\n📱 WhatsApp: +${phone}\n👤 Name: ${guestName}\n📦 Product: ${product}\n📊 Quantity: ${qty}\n\nContact this number on WhatsApp to follow up.`
+      ).catch(() => {});
+    }
+    session.state = 'idle'; session.context = {}; await session.save();
+    return wa.sendButtonMessage(phone,
+      `✅ *Thank you, ${guestName}!*\n\nYour requirement for *${product}* (Qty: ${qty}) has been received.\n\nOur sellers will contact you on WhatsApp shortly.\n\nRegister free to track all your inquiries and orders:`,
+      [{ id: 'REGISTER', title: 'Register Free' }]
     );
   }
 
-  // Step 1: choose role
+  // ─── REGISTRATION STEPS ───────────────────────────────────────────────────
+
   if (state === 'reg_role') {
-    // interactiveId may be raw JSON if extraction failed — search it too
-    const searchStr = (cmd + ' ' + (interactiveId || '')).toUpperCase();
-    console.log(`[WA-Reg] reg_role cmd="${cmd}" searchStr="${searchStr}"`);
     let role = null;
-    if (cmd === '1' || searchStr.includes('BUYER')) role = 'buyer';
-    if (cmd === '2' || searchStr.includes('SELLER')) role = 'seller';
+    if (['1', 'BUYER'].includes(cmd)) role = 'buyer';
+    if (['2', 'SELLER'].includes(cmd)) role = 'seller';
     if (!role) {
-      return wa.sendButtonMessage(phone,
-        'Please choose your account type:',
-        [
+      if (['REGISTER', 'JOIN', 'SIGNUP', 'NEW ACCOUNT', 'START', 'SELL', 'SELLER'].includes(cmd)) {
+        return useBotCmd('guest_register_prompt', phone, () => wa.sendButtonMessage(phone, 'Choose your account type:', [
           { id: 'BUYER', title: 'Buyer' },
           { id: 'SELLER', title: 'Seller' },
-        ]
-      );
+        ]));
+      }
+      session.state = 'idle'; session.context = {}; await session.save();
+      return useBotCmd('main_menu', phone, () => wa.sendMainMenu(phone));
     }
     session.state = 'reg_name';
     session.context = { role };
-    session.markModified('context');  // required for Mongoose Mixed type
+    session.markModified('context');
     await session.save();
-    return wa.sendTextMessage(phone, `Great! You chose *${role.toUpperCase()}*.\n\nPlease enter your *full name*:`);
+    return wa.sendTextMessage(phone, `You chose *${role.toUpperCase()}*. 👍\n\nPlease enter your *full name*:`);
   }
 
-  // Step 2: name
   if (state === 'reg_name') {
     const name = text?.trim();
     if (!name || name.length < 2) {
       return wa.sendTextMessage(phone, `Please enter a valid full name (at least 2 characters).`);
     }
+    session.state = 'reg_email';
+    session.context = { ...ctx, name };
+    session.markModified('context');
+    await session.save();
+    return wa.sendTextMessage(phone, `Nice to meet you, *${name}*! 😊\n\nOptionally enter your *email address* (or type *SKIP* to skip):`);
+  }
 
-    // Match phone in ANY stored format by searching last 10 digits as regex
-    const digitsOnly = phone.replace(/\D/g, '');
-    const withPlus   = `+${digitsOnly}`;
-    const last10     = digitsOnly.slice(-10);
-    const existing   = await User.findOne({ phone: { $regex: last10 } });
-    console.log(`[WA-Register] Phone check last10="${last10}" found=${!!existing} storedPhone=${existing?.phone}`);
-    if (existing) {
-      session.state = 'idle';
-      session.context = {};
-      session.markModified('context');
-      await session.save();
-      return wa.sendTextMessage(phone,
-        `⚠️ This mobile number is already registered.\n\n` +
-        `🔑 Login at: ${process.env.CLIENT_URL || 'https://shop.instify.in'}/login\n\n` +
-        `Forgot password? Reply *RESET*`
-      );
+  if (state === 'reg_email') {
+    const emailInput = text?.trim().toLowerCase();
+    const skip = ['SKIP', 'NO', 'NONE', 'NA', 'N/A'].includes(emailInput?.toUpperCase());
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (!skip && !emailRegex.test(emailInput)) {
+      return wa.sendTextMessage(phone, `❌ That doesn't look like a valid email.\n\nEnter your *email address* or type *SKIP*:`);
     }
 
-    // Create account — role comes from session context saved in previous step
-    const tempPassword = generateTempPassword();
-    const role = ctx?.role || 'buyer';
-    console.log(`[WA-Register] Creating user name="${name}" phone="${withPlus}" role="${role}"`);
+    const email = skip ? undefined : emailInput;
+    if (email) {
+      const emailExists = await User.findOne({ email });
+      if (emailExists) {
+        session.state = 'idle'; session.context = {}; await session.save();
+        return wa.sendTextMessage(phone,
+          `⚠️ This email is already registered.\n\n🔑 Login at: ${process.env.CLIENT_URL || 'https://shop.instify.in'}/login\n\nForgot password? Reply *RESET*`
+        );
+      }
+    }
+
+    const { name, role } = ctx;
+    const withPlus = `+${phone}`;
+
+    // Phone duplicate check
+    const last10 = phone.replace(/\D/g, '').slice(-10);
+    const phoneExists = await User.findOne({ phone: { $regex: last10 } });
+    if (phoneExists) {
+      session.state = 'idle'; session.context = {}; await session.save();
+      const magicLink = await generateMagicLink(phoneExists);
+      return wa.sendTextMessage(phone,
+        `👋 You already have an account, *${phoneExists.name}*!\n\n🔗 Click to login & change password:\n${magicLink}\n\n⚠️ Link expires in 30 minutes.\nReply *RESET* to get a new link anytime.`
+      );
+    }
 
     try {
       const user = await User.create({
         name,
-        password: tempPassword,
+        email,
+        password: generateTempPassword(),
         phone: withPlus,
-        role,
+        role: role || 'buyer',
         isVerified: true,
       });
 
@@ -535,111 +624,39 @@ const handleUnknownUser = async (phone, text, session, interactiveId) => {
       session.role = role;
       session.state = 'idle';
       session.context = {};
-    session.markModified('context');
-      await session.save();
-
-      const loginUrl = `${process.env.CLIENT_URL || 'https://shop.instify.in'}/login`;
-
-      await wa.sendTextMessage(phone,
-        `✅ *Account Created Successfully!*\n\n` +
-        `📋 *Your Login Details:*\n` +
-        `👤 Name: ${name}\n` +
-        `📱 Mobile: ${withPlus}\n` +
-        `🔑 Temp Password: *${tempPassword}*\n\n` +
-        `🔗 Login here: ${loginUrl}\n\n` +
-        `⚠️ *Important:* Please change your password after first login.\n\n` +
-        `After login, add your email in profile for important notifications.`
-      );
-
-      console.log(`[WA-Register] New ${role} account created: ${name} from ${withPlus}`);
-    } catch (err) {
-      console.error('[WA-Register] Error creating account:', err.code, err.message);
-      session.state = 'idle';
-      session.context = {};
       session.markModified('context');
       await session.save();
+
+      const magicLink = await generateMagicLink(user);
+
+      await wa.sendTextMessage(phone,
+        `✅ *Registration Successful!*\n\n` +
+        `👤 Name: ${name}\n` +
+        (email ? `📧 Email: ${email}\n` : '') +
+        `📱 Phone: ${withPlus}\n` +
+        `👤 Role: ${role || 'buyer'}\n\n` +
+        `🔗 *Click to login & set your password:*\n${magicLink}\n\n` +
+        `⚠️ Link expires in 30 minutes.\n` +
+        `Add your email in Profile for notifications after login.`
+      );
+
+      console.log(`[WA-Register] New ${role} account: ${name} (${email || 'no email'}) from ${withPlus}`);
+    } catch (err) {
+      console.error('[WA-Register] Error creating account:', err.code, err.message);
+      session.state = 'idle'; session.context = {}; await session.save();
       if (err.code === 11000) {
         return wa.sendTextMessage(phone,
-          `⚠️ This mobile number is already registered.\n\n` +
-          `🔑 Login at: ${process.env.CLIENT_URL || 'https://shop.instify.in'}/login\n\n` +
-          `Forgot password? Reply *RESET*`
+          `⚠️ This number is already registered.\nReply *RESET* to get a login link.`
         );
       }
-      return wa.sendTextMessage(phone, `❌ Something went wrong. Please try again or register at our website.`);
+      return wa.sendTextMessage(phone, `❌ Something went wrong. Please try again later.`);
     }
     return;
   }
 
-  // Guest inquiry submission
-  if (state === 'guest_inquiry') {
-    const parts = text.split('|').map((s) => s.trim());
-    const productName = parts[0];
-    const quantity = parts[1] || 'Not specified';
-    const guestName = parts[2] || 'Guest';
-
-    if (!productName || productName.length < 2) {
-      return wa.sendTextMessage(phone,
-        `Please use the format:\n*Product | Quantity | Your name*\n\nExample:\n_Business Cards | 500 pcs | Rahul_`
-      );
-    }
-
-    // Save as a guest inquiry in WhatsApp log (no DB Inquiry record — no registered user)
-    await wa.logMessage({
-      direction: 'inbound',
-      phone,
-      messageType: 'text',
-      message: `[GUEST INQUIRY] ${text}`,
-    });
-
-    session.state = 'idle';
-    session.context = {};
-    session.markModified('context');
-    await session.save();
-
-    // Notify admin via WhatsApp
-    const adminPhone = process.env.ADMIN_WHATSAPP_PHONE;
-    if (adminPhone) {
-      await wa.sendTextMessage(adminPhone,
-        `📩 *New Guest Inquiry*\n\n` +
-        `📱 From: +${phone}\n` +
-        `👤 Name: ${guestName}\n` +
-        `📦 Product: ${productName}\n` +
-        `📊 Quantity: ${quantity}\n\n` +
-        `Reply directly to this number on WhatsApp to follow up.`
-      ).catch(() => {});
-    }
-
-    return wa.sendTextMessage(phone,
-      `✅ *Inquiry Received!*\n\n` +
-      `*Product:* ${productName}\n` +
-      `*Quantity:* ${quantity}\n\n` +
-      `Our team will connect you with the right sellers shortly. They'll message you here on WhatsApp.\n\n` +
-      `📝 Register for free to track your inquiries:\nReply *REGISTER*`
-    );
-  }
-
-  // Reset flow
-  if (cmd === 'RESET') {
-    session.state = 'idle';
-    session.context = {};
-    session.markModified('context');
-    await session.save();
-    return wa.sendTextMessage(phone,
-      `To reset your password, visit:\n${process.env.CLIENT_URL || 'https://shop.instify.in'}/forgot-password`
-    );
-  }
-
-  // Fallback
-  session.state = 'idle';
-  session.context = {};
-    session.markModified('context');
-  await session.save();
-  return wa.sendTextMessage(phone,
-    `👋 Welcome to *PrintMart*!\n\n` +
-    `📩 *INQUIRE* – Send an inquiry without registering\n` +
-    `📝 *REGISTER* – Create a free account\n\n` +
-    `Reply with a command to get started.`
-  );
+  // ─── FALLBACK ─────────────────────────────────────────────────────────────
+  session.state = 'idle'; session.context = {}; await session.save();
+  return useBotCmd('main_menu', phone, () => wa.sendMainMenu(phone));
 };
 
 // ─── Helper: find quotation ───────────────────────────────────────────────────
@@ -769,16 +786,7 @@ const webhookReceive = async (req, res) => {
         if (!handledByAutoReply) {
           try {
             const upperText = text?.trim().toUpperCase();
-            const crypto = require('crypto');
             const loginUrl = process.env.CLIENT_URL || 'https://shop.instify.in';
-
-            const generateMagicLink = async (u) => {
-              const token = crypto.randomBytes(32).toString('hex');
-              u.magicToken = token;
-              u.magicTokenExpire = new Date(Date.now() + 30 * 60 * 1000); // 30 min
-              await u.save();
-              return `${loginUrl}/magic-login?token=${token}`;
-            };
 
             // REGISTER — already registered: send magic login link
             if (['REGISTER', 'JOIN', 'SIGNUP', 'NEW ACCOUNT', 'START'].includes(upperText) && user) {
@@ -833,8 +841,8 @@ const webhookReceive = async (req, res) => {
                 `Your seller dashboard remains active. Reply *MENU* for seller commands.`
               );
 
-            } else if (!user || session.state?.startsWith('reg_')) {
-              await handleUnknownUser(from, text, session, interactiveId);
+            } else if (!user || session.state?.startsWith('reg_') || session.state?.startsWith('guest_')) {
+              await handleUnknownUser(from, text, interactiveId, session);
             } else if (user.role === 'seller' || user.role === 'admin') {
               await handleSellerMessage(from, user, text, interactiveId);
             } else {

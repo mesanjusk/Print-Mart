@@ -6,7 +6,7 @@ import {
   FiMessageSquare, FiSend, FiUsers, FiActivity, FiSettings,
   FiCheckCircle, FiXCircle, FiPhone, FiRefreshCw, FiRadio,
   FiClock, FiZap, FiTrash2, FiPlay, FiPause, FiPlus, FiEdit2,
-  FiChevronDown, FiChevronUp, FiAlertCircle, FiBell
+  FiChevronDown, FiChevronUp, FiAlertCircle, FiBell, FiCommand
 } from "react-icons/fi";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -1016,73 +1016,363 @@ function LogsPanel() {
 
 // ─── Bot Flow Panel ───────────────────────────────────────────────────────────
 
+const ROLE_STYLES = {
+  guest:  { bg: 'bg-purple-50', border: 'border-purple-200', badge: 'bg-purple-100 text-purple-700', header: 'bg-purple-50 border-purple-200', label: '👤 Guest (Unregistered)' },
+  buyer:  { bg: 'bg-blue-50',   border: 'border-blue-200',   badge: 'bg-blue-100 text-blue-700',     header: 'bg-blue-50 border-blue-200',     label: '🛒 Buyer' },
+  seller: { bg: 'bg-green-50',  border: 'border-green-200',  badge: 'bg-green-100 text-green-700',   header: 'bg-green-50 border-green-200',   label: '🏪 Seller' },
+  any:    { bg: 'bg-gray-50',   border: 'border-gray-200',   badge: 'bg-gray-100 text-gray-600',     header: 'bg-gray-50 border-gray-200',     label: '🌐 Any Role' },
+};
+const ROLE_ORDER = ['guest', 'buyer', 'seller', 'any'];
+
+function CommandCard({ cmd, onEdit, onDelete, onReset, onToggleActive }) {
+  const s = ROLE_STYLES[cmd.role] || ROLE_STYLES.any;
+  return (
+    <div className={`card border ${s.border} overflow-hidden`}>
+      <div className={`px-4 py-2.5 ${s.header} border-b flex items-center justify-between gap-2`}>
+        <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+          <span className="font-mono text-xs font-bold text-gray-700 truncate">{cmd.key}</span>
+          <span className={`text-xs px-1.5 py-0.5 rounded-full whitespace-nowrap ${s.badge}`}>{ROLE_STYLES[cmd.role]?.label || cmd.role}</span>
+          {cmd.isSystem && <span className="text-xs px-1.5 py-0.5 rounded-full bg-yellow-100 text-yellow-700 whitespace-nowrap">System</span>}
+          <span className={`text-xs px-1.5 py-0.5 rounded-full whitespace-nowrap ${cmd.response.type === 'button' ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-600'}`}>
+            {cmd.response.type === 'button' ? '🔘 Buttons' : '📝 Text'}
+          </span>
+        </div>
+        <div className="flex items-center gap-0.5 flex-shrink-0">
+          <button onClick={() => onToggleActive(cmd)} title={cmd.isActive ? 'Active – click to deactivate' : 'Inactive – click to activate'}
+            className={`p-1.5 rounded-lg ${cmd.isActive ? 'text-green-600 hover:bg-green-100' : 'text-gray-400 hover:bg-gray-100'}`}>
+            {cmd.isActive ? <FiCheckCircle size={14} /> : <FiXCircle size={14} />}
+          </button>
+          <button onClick={() => onEdit(cmd)} title="Edit" className="p-1.5 rounded-lg text-gray-500 hover:bg-white hover:text-gray-700">
+            <FiEdit2 size={14} />
+          </button>
+          {cmd.isSystem ? (
+            <button onClick={() => onReset(cmd)} title="Reset to default" className="p-1.5 rounded-lg text-amber-500 hover:bg-amber-50">
+              <FiRefreshCw size={14} />
+            </button>
+          ) : (
+            <button onClick={() => onDelete(cmd)} title="Delete" className="p-1.5 rounded-lg text-red-400 hover:bg-red-50">
+              <FiTrash2 size={14} />
+            </button>
+          )}
+        </div>
+      </div>
+      <div className="p-3 space-y-2">
+        <div>
+          <p className="font-medium text-gray-800 text-sm">{cmd.label}</p>
+          {cmd.description && <p className="text-xs text-gray-400 mt-0.5">{cmd.description}</p>}
+        </div>
+        {cmd.triggers?.length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {cmd.triggers.map((t, i) => (
+              <span key={i} className="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded font-mono">{t}</span>
+            ))}
+          </div>
+        )}
+        {cmd.response.text && (
+          <p className="text-xs text-gray-600 bg-gray-50 rounded p-2 font-mono whitespace-pre-wrap line-clamp-3">
+            {cmd.response.text.slice(0, 150)}{cmd.response.text.length > 150 ? '…' : ''}
+          </p>
+        )}
+        {cmd.response.type === 'button' && cmd.response.buttons?.length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {cmd.response.buttons.map((btn, i) => (
+              <span key={i} className="text-xs bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded-lg font-medium">
+                {btn.title}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CommandModal({ command, onSave, onClose, saving }) {
+  const isNew = !command?._id;
+  const [form, setForm] = useState(() => command ? {
+    ...command,
+    response: { ...command.response, buttons: command.response.buttons || [] },
+  } : {
+    key: '', label: '', description: '', role: 'guest',
+    triggers: [],
+    response: { type: 'button', text: '', buttons: [{ id: '', title: '' }] },
+    isActive: true,
+  });
+  const [triggersInput, setTriggersInput] = useState((command?.triggers || []).join(', '));
+  const [tab, setTab] = useState('basic');
+
+  const set = (f, v) => setForm(prev => ({ ...prev, [f]: v }));
+  const setResp = (f, v) => setForm(prev => ({ ...prev, response: { ...prev.response, [f]: v } }));
+
+  const addBtn = () => {
+    if (form.response.buttons.length >= 3) return;
+    setResp('buttons', [...form.response.buttons, { id: '', title: '' }]);
+  };
+  const removeBtn = (i) => setResp('buttons', form.response.buttons.filter((_, idx) => idx !== i));
+  const updateBtn = (i, field, value) => {
+    const btns = [...form.response.buttons];
+    btns[i] = { ...btns[i], [field]: value };
+    setResp('buttons', btns);
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    onSave({
+      ...form,
+      triggers: triggersInput.split(',').map(t => t.trim().toLowerCase()).filter(Boolean),
+    }, isNew);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div className="px-6 py-4 border-b flex items-center justify-between sticky top-0 bg-white">
+          <h3 className="font-semibold text-gray-800 text-sm">{isNew ? 'Add New Bot Command' : `Edit: ${command.label}`}</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-lg leading-none">✕</button>
+        </div>
+
+        <div className="flex border-b px-4">
+          {['basic', 'response'].map(t => (
+            <button key={t} onClick={() => setTab(t)}
+              className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px capitalize ${tab === t ? 'border-green-500 text-green-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+              {t === 'basic' ? 'Basic Info' : 'Response'}
+            </button>
+          ))}
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          {tab === 'basic' && <>
+            {isNew && (
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Key <span className="text-gray-400 font-normal">(unique identifier, no spaces)</span></label>
+                <input className="input-field text-sm font-mono" placeholder="e.g. promo_reply" value={form.key}
+                  onChange={e => set('key', e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_'))} required />
+              </div>
+            )}
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Label</label>
+              <input className="input-field text-sm" value={form.label} onChange={e => set('label', e.target.value)} required />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Description <span className="text-gray-400 font-normal">(optional)</span></label>
+              <input className="input-field text-sm" value={form.description} onChange={e => set('description', e.target.value)} />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">User Role</label>
+              <select className="input-field text-sm" value={form.role} onChange={e => set('role', e.target.value)}>
+                <option value="guest">Guest (unregistered)</option>
+                <option value="buyer">Buyer</option>
+                <option value="seller">Seller</option>
+                <option value="any">Any</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Trigger Keywords <span className="text-gray-400 font-normal">(comma-separated, documentation only)</span></label>
+              <input className="input-field text-sm font-mono" placeholder="hi, hello, hey, start"
+                value={triggersInput} onChange={e => setTriggersInput(e.target.value)} />
+            </div>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={form.isActive} onChange={e => set('isActive', e.target.checked)} className="rounded" />
+              <span className="text-sm text-gray-700">Active</span>
+            </label>
+          </>}
+
+          {tab === 'response' && <>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-2">Response Type</label>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => setResp('type', 'text')}
+                  className={`flex-1 py-2 text-sm rounded-lg border font-medium transition-colors ${form.response.type === 'text' ? 'bg-gray-800 text-white border-gray-800' : 'border-gray-300 text-gray-600 hover:border-gray-400'}`}>
+                  📝 Plain Text
+                </button>
+                <button type="button" onClick={() => setResp('type', 'button')}
+                  className={`flex-1 py-2 text-sm rounded-lg border font-medium transition-colors ${form.response.type === 'button' ? 'bg-indigo-600 text-white border-indigo-600' : 'border-gray-300 text-gray-600 hover:border-gray-400'}`}>
+                  🔘 Buttons
+                </button>
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Message Body
+                <span className="text-gray-400 font-normal ml-1">— use *text* for bold, {"{name}"} for user's name</span>
+              </label>
+              <textarea className="input-field text-sm font-mono resize-y" rows={5}
+                value={form.response.text} onChange={e => setResp('text', e.target.value)}
+                placeholder="Enter the WhatsApp message..." required />
+            </div>
+            {form.response.type === 'button' && (
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs font-medium text-gray-700">Buttons <span className="text-gray-400 font-normal">(max 3)</span></label>
+                  {form.response.buttons.length < 3 && (
+                    <button type="button" onClick={addBtn} className="text-xs text-indigo-600 hover:text-indigo-800 flex items-center gap-1">
+                      <FiPlus size={12} /> Add
+                    </button>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  {form.response.buttons.map((btn, i) => (
+                    <div key={i} className="flex gap-2 items-center">
+                      <input className="input-field text-xs font-mono flex-1" placeholder="ID (e.g. ACTION_1)"
+                        value={btn.id} onChange={e => updateBtn(i, 'id', e.target.value.toUpperCase().replace(/\s+/g, '_'))} required />
+                      <input className="input-field text-xs flex-1" placeholder="Label (max 20 chars)"
+                        value={btn.title} maxLength={20} onChange={e => updateBtn(i, 'title', e.target.value)} required />
+                      <button type="button" onClick={() => removeBtn(i)} className="p-1.5 text-red-400 hover:text-red-600 flex-shrink-0">
+                        <FiTrash2 size={14} />
+                      </button>
+                    </div>
+                  ))}
+                  {form.response.buttons.length === 0 && (
+                    <button type="button" onClick={addBtn}
+                      className="w-full py-3 border-2 border-dashed border-gray-300 rounded-lg text-sm text-gray-400 hover:border-indigo-300 hover:text-indigo-500">
+                      + Add first button
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+          </>}
+
+          <div className="flex gap-2 pt-2 border-t">
+            <button type="button" onClick={onClose} className="btn-secondary flex-1 text-sm">Cancel</button>
+            <button type="submit" disabled={saving} className="btn-primary flex-1 text-sm">
+              {saving ? 'Saving…' : (isNew ? 'Create Command' : 'Save Changes')}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 function BotFlowPanel() {
-  const buyerCommands = [
-    { cmd: "Hi / Hello", desc: "Welcome message with menu options" },
-    { cmd: "Products / Browse", desc: "Browse available products" },
-    { cmd: "Orders", desc: "View your recent orders" },
-    { cmd: "Help", desc: "Show available commands" },
-    { cmd: "Quote", desc: "Request a price quote" },
-    { cmd: "Stop", desc: "Opt out of WhatsApp messages" },
-  ];
-  const sellerCommands = [
-    { cmd: "Hi / Hello", desc: "Welcome message with seller dashboard link" },
-    { cmd: "Orders", desc: "View incoming orders" },
-    { cmd: "Enquiries", desc: "View pending enquiries" },
-    { cmd: "Help", desc: "Show seller commands" },
-    { cmd: "Stats", desc: "Sales summary" },
-    { cmd: "Stop", desc: "Opt out of WhatsApp messages" },
-  ];
+  const [commands, setCommands] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [editModal, setEditModal] = useState(null);
+  const [createModal, setCreateModal] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await waAdminAPI.getBotCommands();
+      setCommands(res.data);
+    } catch {
+      toast.error('Failed to load bot commands');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const grouped = commands.reduce((acc, cmd) => {
+    (acc[cmd.role] = acc[cmd.role] || []).push(cmd);
+    return acc;
+  }, {});
+
+  const handleSave = async (data, isNew) => {
+    setSaving(true);
+    try {
+      if (isNew) {
+        await waAdminAPI.createBotCommand(data);
+        toast.success('Command created');
+      } else {
+        await waAdminAPI.updateBotCommand(data._id, data);
+        toast.success('Command updated');
+      }
+      setEditModal(null);
+      setCreateModal(false);
+      load();
+    } catch (e) {
+      toast.error(e.response?.data?.message || 'Save failed');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (cmd) => {
+    if (!window.confirm(`Delete "${cmd.label}"? This cannot be undone.`)) return;
+    try {
+      await waAdminAPI.deleteBotCommand(cmd._id);
+      toast.success('Command deleted');
+      load();
+    } catch (e) {
+      toast.error(e.response?.data?.message || 'Delete failed');
+    }
+  };
+
+  const handleReset = async (cmd) => {
+    if (!window.confirm(`Reset "${cmd.label}" to factory defaults?`)) return;
+    try {
+      await waAdminAPI.resetBotCommand(cmd._id);
+      toast.success('Reset to default');
+      load();
+    } catch (e) {
+      toast.error(e.response?.data?.message || 'Reset failed');
+    }
+  };
+
+  const toggleActive = async (cmd) => {
+    try {
+      await waAdminAPI.updateBotCommand(cmd._id, { isActive: !cmd.isActive });
+      setCommands(cs => cs.map(c => c._id === cmd._id ? { ...c, isActive: !c.isActive } : c));
+    } catch {
+      toast.error('Toggle failed');
+    }
+  };
+
+  if (loading) return <div className="flex justify-center py-20"><Spinner /></div>;
 
   return (
     <div className="space-y-6">
-      <h2 className="text-lg font-semibold text-gray-800">Bot Reference</h2>
-      <div className="card p-4 flex items-start gap-3 bg-purple-50 border-purple-200">
-        <FiZap size={15} className="text-purple-500 mt-0.5 flex-shrink-0" />
-        <div className="text-sm text-purple-700">
-          <p className="font-medium mb-1">Auto-Reply Priority Order</p>
-          <ol className="list-decimal list-inside space-y-0.5 text-xs">
-            <li>Opt-out commands (STOP, UNSUBSCRIBE)</li>
-            <li>Keyword-matched auto_reply campaigns (ordered by priority)</li>
-            <li>Bot flow commands (role-based)</li>
-            <li>Default fallback reply</li>
-          </ol>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-semibold text-gray-800">Bot Flow Commands</h2>
+          <p className="text-xs text-gray-500 mt-0.5">Edit WhatsApp bot responses — changes apply immediately for new messages</p>
+        </div>
+        <button onClick={() => setCreateModal(true)} className="btn-primary flex items-center gap-1.5 text-sm">
+          <FiPlus size={14} /> Add Command
+        </button>
+      </div>
+
+      <div className="card p-4 flex items-start gap-3 bg-amber-50 border-amber-200">
+        <FiAlertCircle size={15} className="text-amber-500 mt-0.5 flex-shrink-0" />
+        <div className="text-xs text-amber-800 space-y-1">
+          <p className="font-medium">How bot commands work</p>
+          <p>Edit message text and buttons here — the bot uses these responses in real time. System commands (yellow badge) can't be deleted but can be reset to defaults. Use <code className="bg-amber-100 px-1 rounded font-mono">{"{name}"}</code> in message text for the user's name. Trigger keywords shown here are for reference only — actual routing is in the code.</p>
         </div>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="card overflow-hidden">
-          <div className="px-4 py-3 border-b bg-blue-50 flex items-center gap-2">
-            <FiUsers size={15} className="text-blue-600" />
-            <h3 className="font-semibold text-blue-800">Buyer Commands</h3>
-          </div>
-          <table className="w-full text-sm">
-            <tbody>
-              {buyerCommands.map((c, i) => (
-                <tr key={i} className="border-t hover:bg-gray-50">
-                  <td className="px-4 py-2 font-mono text-xs text-blue-700 font-medium">{c.cmd}</td>
-                  <td className="px-4 py-2 text-gray-600">{c.desc}</td>
-                </tr>
+
+      {ROLE_ORDER.map(role => {
+        const cmds = grouped[role];
+        if (!cmds?.length) return null;
+        return (
+          <div key={role}>
+            <h3 className="text-sm font-semibold text-gray-600 mb-3 flex items-center gap-2">
+              {ROLE_STYLES[role]?.label}
+              <span className="text-xs font-normal text-gray-400">{cmds.length} command{cmds.length !== 1 ? 's' : ''}</span>
+            </h3>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {cmds.map(cmd => (
+                <CommandCard key={cmd._id} cmd={cmd}
+                  onEdit={setEditModal} onDelete={handleDelete}
+                  onReset={handleReset} onToggleActive={toggleActive}
+                />
               ))}
-            </tbody>
-          </table>
-        </div>
-        <div className="card overflow-hidden">
-          <div className="px-4 py-3 border-b bg-green-50 flex items-center gap-2">
-            <FiActivity size={15} className="text-green-600" />
-            <h3 className="font-semibold text-green-800">Seller Commands</h3>
+            </div>
           </div>
-          <table className="w-full text-sm">
-            <tbody>
-              {sellerCommands.map((c, i) => (
-                <tr key={i} className="border-t hover:bg-gray-50">
-                  <td className="px-4 py-2 font-mono text-xs text-green-700 font-medium">{c.cmd}</td>
-                  <td className="px-4 py-2 text-gray-600">{c.desc}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+        );
+      })}
+
+      {(editModal || createModal) && (
+        <CommandModal
+          command={editModal || null}
+          onSave={handleSave}
+          onClose={() => { setEditModal(null); setCreateModal(false); }}
+          saving={saving}
+        />
+      )}
     </div>
   );
 }
@@ -1099,7 +1389,7 @@ const TABS = [
   { id: "templates", label: "Templates", icon: FiSettings },
   { id: "optouts", label: "Opt-Outs", icon: FiXCircle },
   { id: "logs", label: "Logs", icon: FiActivity },
-  { id: "botref", label: "Bot Ref", icon: FiZap },
+  { id: "botref", label: "Bot Flows", icon: FiCommand },
 ];
 
 export default function WhatsAppAdmin() {

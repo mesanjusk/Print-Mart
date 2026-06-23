@@ -120,6 +120,12 @@ export const waAdminAPI = {
   // Templates
   getTemplates: () => api.get('/admin/whatsapp/templates'),
   syncTemplates: () => api.post('/admin/whatsapp/templates/sync'),
+  // Bot Commands
+  getBotCommands: () => api.get('/admin/whatsapp/bot-commands'),
+  createBotCommand: (data) => api.post('/admin/whatsapp/bot-commands', data),
+  updateBotCommand: (id, data) => api.put(`/admin/whatsapp/bot-commands/${id}`, data),
+  deleteBotCommand: (id) => api.delete(`/admin/whatsapp/bot-commands/${id}`),
+  resetBotCommand: (id) => api.post(`/admin/whatsapp/bot-commands/${id}/reset`),
 };
 
 export const compareAPI = {

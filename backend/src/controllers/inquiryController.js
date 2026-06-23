@@ -44,7 +44,8 @@ const createInquiry = asyncHandler(async (req, res) => {
         quantity,
         unit,
         inquiry._id,
-        inquiry.seller._id
+        inquiry.seller._id,
+        inquiry.buyer?.phone
       );
     }
     if (inquiry.seller?.pushEnabled && inquiry.seller?.pushSubscription?.endpoint) {

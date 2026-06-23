@@ -240,20 +240,25 @@ const sendHelpSeller = async (phone, userId) => {
   return sendTextMessage(phone, body, userId);
 };
 
-const sendInquiryNotificationToSeller = async (sellerPhone, buyerName, productName, message, quantity, unit, inquiryId, userId) => {
+const sendInquiryNotificationToSeller = async (sellerPhone, buyerName, productName, message, quantity, unit, inquiryId, userId, buyerPhone) => {
   if (!sellerPhone) return null;
   const shortId = String(inquiryId).slice(-6).toUpperCase();
   const body =
     `🔔 *New Inquiry – PrintMart*\n\n` +
-    `*Buyer:* ${buyerName}\n` +
-    `*Product:* ${productName}\n` +
-    `*Quantity:* ${quantity} ${unit}\n` +
-    `*Message:* ${message}\n` +
-    `*Ref:* INQ-${shortId}\n\n` +
-    `Reply here to respond to this inquiry, or send:\n` +
-    `*QUOTE [amount]* to create a quotation\n` +
-    `e.g.  QUOTE 5000`;
-  return sendTextMessage(sellerPhone, body, userId);
+    `━━━━━━━━━━━━━━━━━━━━\n` +
+    `📦 *Product:* ${productName}\n` +
+    `📊 *Qty:* ${quantity} ${unit}\n` +
+    `💬 *Message:* ${message}\n` +
+    `🔖 *Ref:* INQ-${shortId}\n` +
+    `━━━━━━━━━━━━━━━━━━━━\n\n` +
+    `👤 *Buyer:* ${buyerName}\n` +
+    (buyerPhone ? `📱 *WhatsApp:* wa.me/${String(buyerPhone).replace(/\D/g, '')}\n` : '') +
+    `\nReply *QUOTE [amount]* to send your best price.\ne.g.  QUOTE 5000`;
+  await sendTextMessage(sellerPhone, body, userId);
+  if (buyerPhone) {
+    const cleanBuyer = String(buyerPhone).replace(/\D/g, '');
+    await sendContactCard(sellerPhone, { name: buyerName, businessName: '', phone: cleanBuyer }, userId).catch(() => {});
+  }
 };
 
 const sendInquiryConfirmationToBuyer = async (buyerPhone, productName, sellerBusiness, userId, sellerPhone) => {

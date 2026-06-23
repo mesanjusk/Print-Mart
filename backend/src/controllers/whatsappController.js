@@ -130,7 +130,18 @@ const handleBuyerMessage = async (phone, user, text, interactiveId, session) => 
   }
 
   if (cmd.cmd === 'MENU') {
-    return useBotCmd('buyer_welcome', phone, () => wa.sendWelcomeBuyer(phone, user.name, user._id), { userId: user._id, name: user.name });
+    return wa.sendButtonMessage(phone,
+      `Hey *${user.name}* 👋 Welcome to *PrintMart*!\n\nWhat would you like to do?`,
+      [{ id: 'GET_QUOTE', title: 'Get Quote' }, { id: 'HELP', title: 'Help' }],
+      user._id
+    );
+  }
+
+  if (cmd.cmd === 'GET_QUOTE') {
+    session.state = 'guest_product';
+    session.context = {};
+    await session.save();
+    return wa.sendTextMessage(phone, `📦 *What product are you looking for?*\n\nPlease type the product name:`, user._id);
   }
 
   if (cmd.cmd === 'HELP') {
@@ -466,7 +477,7 @@ const useBotCmd = async (key, phone, fallback, { userId, name } = {}) => {
   return fallback();
 };
 
-const handleUnknownUser = async (phone, text, interactiveId, session) => {
+const handleUnknownUser = async (phone, text, interactiveId, session, profileName = '') => {
   // interactiveId takes priority so button taps are handled correctly
   const cmd = interactiveId ? interactiveId.toUpperCase() : text?.trim().toUpperCase();
   const state = session?.state || 'idle';
@@ -474,20 +485,37 @@ const handleUnknownUser = async (phone, text, interactiveId, session) => {
 
   // ─── IDLE ─────────────────────────────────────────────────────────────────
   if (state === 'idle') {
-    if (['INQUIRE', 'INQUIRY', 'ENQUIRE', 'ENQUIRY', 'QUOTE', 'PRICE', 'BUY', 'GET A QUOTE'].includes(cmd)) {
+    // Auto-register with WhatsApp profile name (silent, no prompts)
+    let autoUser = null;
+    if (!session.userId) {
+      const last10 = phone.replace(/\D/g, '').slice(-10);
+      autoUser = await User.findOne({ phone: { $regex: last10 } });
+      if (!autoUser) {
+        const displayName = profileName || 'PrintMart User';
+        try {
+          autoUser = await User.create({
+            name: displayName,
+            password: generateTempPassword(),
+            phone: `+${phone}`,
+            role: 'buyer',
+            isVerified: true,
+          });
+        } catch (err) {
+          if (err.code === 11000) autoUser = await User.findOne({ phone: { $regex: last10 } });
+        }
+      }
+      if (autoUser) {
+        session.userId = autoUser._id;
+        session.role = autoUser.role;
+        await session.save();
+      }
+    }
+
+    if (['INQUIRE', 'INQUIRY', 'ENQUIRE', 'ENQUIRY', 'QUOTE', 'PRICE', 'BUY', 'GET A QUOTE', 'GET_QUOTE', 'GET QUOTE'].includes(cmd)) {
       session.state = 'guest_product';
       session.context = {};
       await session.save();
       return wa.sendTextMessage(phone, `📦 *What product are you looking for?*\n\nPlease type the product name:`);
-    }
-
-    // Register as Buyer
-    if (['REGISTER', 'JOIN', 'SIGNUP', 'NEW ACCOUNT'].includes(cmd)) {
-      session.state = 'reg_name';
-      session.context = { role: 'buyer' };
-      session.markModified('context');
-      await session.save();
-      return wa.sendTextMessage(phone, `✅ *Create your Buyer account!*\n\nPlease enter your *full name*:`);
     }
 
     // Register as Seller (separate command with business details)
@@ -504,29 +532,28 @@ const handleUnknownUser = async (phone, text, interactiveId, session) => {
 
     if (cmd === 'HELP') {
       return useBotCmd('guest_help', phone, () => wa.sendButtonMessage(phone,
-        `*How can we help?*\n\n• Tap *Get a Quote* to send a requirement to sellers\n• Tap *Register* to create a free account\n\n🌐 Website: ${process.env.CLIENT_URL || 'https://shop.instify.in'}\n📞 Support: +91 93701 95000`,
-        [
-          { id: 'INQUIRE', title: 'Get a Quote' },
-          { id: 'REGISTER', title: 'Register' },
-        ]
+        `*How can we help?*\n\n• Tap *Get Quote* to send your requirement to sellers\n• Visit our website to browse products\n\n🌐 Website: ${process.env.CLIENT_URL || 'https://shop.instify.in'}\n📞 Support: +91 93701 95000`,
+        [{ id: 'GET_QUOTE', title: 'Get Quote' }]
       ));
     }
 
     if (cmd === 'RESET') {
-      const last10 = phone.replace(/\D/g, '').slice(-10);
-      const existingUser = await User.findOne({ phone: { $regex: last10 } });
+      const last10r = phone.replace(/\D/g, '').slice(-10);
+      const existingUser = await User.findOne({ phone: { $regex: last10r } });
       if (existingUser) {
         const magicLink = await generateMagicLink(existingUser);
         return wa.sendTextMessage(phone,
           `🔑 *Login Link*\n\nHi *${existingUser.name}*! Click below to login and set your password:\n\n🔗 ${magicLink}\n\n⚠️ Link expires in 30 minutes.\nGo to Profile → Change Password after logging in.`
         );
       }
-      return wa.sendTextMessage(phone,
-        `⚠️ No account found for this number.\n\nReply *REGISTER* to create a free buyer account, or *SELL* to join as a seller.`
-      );
+      return wa.sendTextMessage(phone, `⚠️ No account found for this number.\n\nReply *SELL* to join as a seller.`);
     }
 
-    return useBotCmd('main_menu', phone, () => wa.sendMainMenu(phone));
+    const greetName = autoUser?.name || profileName || 'there';
+    return wa.sendButtonMessage(phone,
+      `Hey *${greetName}* 👋 Welcome to *PrintMart*!\n\nConnect with top printing sellers across India.\n\nWhat would you like to do?`,
+      [{ id: 'GET_QUOTE', title: 'Get Quote' }, { id: 'HELP', title: 'Help' }]
+    );
   }
 
   // ─── GUIDED GUEST INQUIRY ─────────────────────────────────────────────────
@@ -541,7 +568,7 @@ const handleUnknownUser = async (phone, text, interactiveId, session) => {
       return wa.sendTextMessage(phone, `Please type the product name you are looking for.`);
     }
     session.state = 'guest_qty';
-    session.context = { product };
+    session.context = { product, buyerName: profileName };
     await session.save();
     return wa.sendTextMessage(phone, `📊 *How many pieces do you need?*\n\nEnter the quantity (e.g. 500):`);
   }
@@ -553,10 +580,90 @@ const handleUnknownUser = async (phone, text, interactiveId, session) => {
     }
     const qty = text?.trim();
     if (!qty) return wa.sendTextMessage(phone, `Please enter the quantity.`);
-    session.state = 'guest_name';
-    session.context = { ...ctx, qty };
-    await session.save();
-    return wa.sendTextMessage(phone, `👤 *What is your name?*\n\nSo sellers can address you properly:`);
+    const { product, buyerName: ctxName } = ctx;
+
+    // Resolve buyer name from context, profile, or registered account
+    let buyerName = ctxName || profileName;
+    if (!buyerName && session.userId) {
+      const sessionUser = await User.findById(session.userId).lean();
+      buyerName = sessionUser?.name;
+    }
+    buyerName = buyerName || 'PrintMart User';
+
+    await wa.logMessage({ direction: 'inbound', phone, messageType: 'text', message: `[INQUIRY] Product: ${product} | Qty: ${qty} | Buyer: ${buyerName}` });
+    const adminPhone = process.env.ADMIN_WHATSAPP_PHONE;
+    if (adminPhone) {
+      await wa.sendTextMessage(adminPhone,
+        `📩 *New Inquiry – PrintMart*\n\n📱 WhatsApp: +${phone}\n👤 Name: ${buyerName}\n📦 Product: ${product}\n📊 Quantity: ${qty}`
+      ).catch(() => {});
+    }
+
+    try {
+      const matchingProducts = await Product.find({
+        $or: [
+          { name: { $regex: product, $options: 'i' } },
+          { tags: { $elemMatch: { $regex: product, $options: 'i' } } },
+        ],
+        isActive: true,
+      }).populate('seller', 'name businessName phone').lean();
+
+      const sellers = [];
+      const seen = new Set();
+      for (const p of matchingProducts) {
+        if (p.seller?.phone && !seen.has(String(p.seller._id))) {
+          sellers.push(p.seller);
+          seen.add(String(p.seller._id));
+          if (sellers.length >= 3) break;
+        }
+      }
+
+      session.state = 'idle'; session.context = {}; await session.save();
+
+      // Build confirmation message with optional magic link
+      let confirmMsg =
+        `✅ *Inquiry Received, ${buyerName}!*\n\n` +
+        `Your requirement for *${product}* (Qty: ${qty}) has been noted.\n\n` +
+        (sellers.length > 0
+          ? `We found *${sellers.length}* seller(s) — tap a contact below to call or WhatsApp them directly.`
+          : `Sellers will contact you shortly on WhatsApp.`);
+
+      if (session.userId) {
+        const trackerUser = await User.findById(session.userId);
+        if (trackerUser) {
+          const magicLink = await generateMagicLink(trackerUser);
+          confirmMsg += `\n\n🔗 *Track your inquiry:*\n${magicLink}`;
+        }
+      }
+      await wa.sendTextMessage(phone, confirmMsg);
+
+      if (sellers.length > 0) {
+        for (const s of sellers) {
+          await wa.sendContactCard(phone, s).catch(() => {});
+        }
+        const guestClean = phone.replace(/\D/g, '');
+        for (const s of sellers) {
+          await wa.sendTextMessage(s.phone,
+            `🔔 *New Inquiry – PrintMart*\n\n` +
+            `━━━━━━━━━━━━━━━━━━━━\n` +
+            `📦 *Product:* ${product}\n` +
+            `📊 *Quantity:* ${qty}\n` +
+            `👤 *Buyer:* ${buyerName}\n` +
+            `📱 *WhatsApp:* wa.me/${guestClean}\n` +
+            `━━━━━━━━━━━━━━━━━━━━\n\n` +
+            `Tap the contact below to reach this buyer directly!`,
+            s._id
+          ).catch(() => {});
+          await wa.sendContactCard(s.phone, { name: buyerName, businessName: '', phone: guestClean }, s._id).catch(() => {});
+        }
+      }
+    } catch (sellerLookupErr) {
+      console.error('[WA-Bot] Seller lookup error:', sellerLookupErr.message);
+      session.state = 'idle'; session.context = {}; await session.save();
+      return wa.sendTextMessage(phone,
+        `✅ *Inquiry Received, ${buyerName}!*\n\nYour requirement for *${product}* (Qty: ${qty}) has been noted.\n\nSellers will contact you shortly on WhatsApp.`
+      );
+    }
+    return;
   }
 
   if (state === 'guest_name') {
@@ -893,6 +1000,8 @@ const webhookReceive = async (req, res) => {
       const messages = value?.messages;
       if (!messages || !messages.length) continue;
 
+      const profileName = value?.contacts?.[0]?.profile?.name || '';
+
       for (const msg of messages) {
         const from = msg.from;
         const msgType = msg.type;
@@ -1035,7 +1144,7 @@ const webhookReceive = async (req, res) => {
               );
 
             } else if (!user || session.state?.startsWith('reg_') || session.state?.startsWith('guest_') || session.state?.startsWith('sell_')) {
-              await handleUnknownUser(from, text, interactiveId, session);
+              await handleUnknownUser(from, text, interactiveId, session, profileName);
             } else if (user.role === 'seller' || user.role === 'admin') {
               await handleSellerMessage(from, user, text, interactiveId);
             } else {

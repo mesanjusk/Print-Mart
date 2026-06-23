@@ -769,37 +769,40 @@ const webhookReceive = async (req, res) => {
         if (!handledByAutoReply) {
           try {
             const upperText = text?.trim().toUpperCase();
-            const generateTempPwd = () => String(Math.floor(1000000 + Math.random() * 9000000));
+            const crypto = require('crypto');
             const loginUrl = process.env.CLIENT_URL || 'https://shop.instify.in';
 
-            // REGISTER — already registered: reset & send temp password
+            const generateMagicLink = async (u) => {
+              const token = crypto.randomBytes(32).toString('hex');
+              u.magicToken = token;
+              u.magicTokenExpire = new Date(Date.now() + 30 * 60 * 1000); // 30 min
+              await u.save();
+              return `${loginUrl}/magic-login?token=${token}`;
+            };
+
+            // REGISTER — already registered: send magic login link
             if (['REGISTER', 'JOIN', 'SIGNUP', 'NEW ACCOUNT', 'START'].includes(upperText) && user) {
-              const tempPassword = generateTempPwd();
-              user.password = tempPassword;
-              await user.save();
+              const magicLink = await generateMagicLink(user);
               await wa.sendTextMessage(from,
                 `👋 Welcome back, *${user.name}*!\n\n` +
                 `You already have a PrintMart account.\n\n` +
                 (user.email ? `📧 Email: ${user.email}\n` : '') +
                 `📱 Phone: ${user.phone}\n` +
-                `👤 Role: ${user.role}\n` +
-                `🔑 Temp Password: *${tempPassword}*\n\n` +
-                `🔗 Login: ${loginUrl}/login\n\n` +
-                `⚠️ Change your password after login.\n` +
+                `👤 Role: ${user.role}\n\n` +
+                `🔗 *Click to login & change password:*\n${magicLink}\n\n` +
+                `⚠️ Link expires in 30 minutes.\n` +
                 `Reply *MENU* after logging in.`
               );
 
-            // RESET — password reset for existing users
+            // RESET — send magic login link
             } else if (upperText === 'RESET' && user) {
-              const tempPassword = generateTempPwd();
-              user.password = tempPassword;
-              await user.save();
+              const magicLink = await generateMagicLink(user);
               await wa.sendTextMessage(from,
                 `🔑 *Password Reset*\n\n` +
-                `Your new temporary password:\n\n` +
-                `*${tempPassword}*\n\n` +
-                `🔗 Login: ${loginUrl}/login\n\n` +
-                `⚠️ Change your password after login via Profile settings.`
+                `Click the link below to login and set a new password:\n\n` +
+                `🔗 ${magicLink}\n\n` +
+                `⚠️ Link expires in 30 minutes.\n` +
+                `Go to Profile → Change Password after logging in.`
               );
 
             // SELLER — buyer requesting upgrade to seller

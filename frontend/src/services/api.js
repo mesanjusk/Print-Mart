@@ -36,6 +36,7 @@ export const authAPI = {
   verifyEmail: (token) => api.get(`/auth/verify-email?token=${token}`),
   verifyOTP: (otp, purpose) => api.post('/auth/verify-otp', { otp, purpose }),
   resendVerification: () => api.post('/auth/resend-verification'),
+  magicLogin: (token) => api.get(`/auth/magic-login?token=${token}`),
 };
 
 export const productAPI = {

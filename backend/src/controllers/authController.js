@@ -281,8 +281,39 @@ const resetPasswordWithOTP = asyncHandler(async (req, res) => {
   res.json({ message: 'Password reset successfully. Please log in.' });
 });
 
+// GET /api/auth/magic-login?token=
+const magicLogin = asyncHandler(async (req, res) => {
+  const { token } = req.query;
+  if (!token) { res.status(400); throw new Error('Token is required'); }
+
+  const user = await User.findOne({
+    magicToken: token,
+    magicTokenExpire: { $gt: new Date() },
+  });
+  if (!user) { res.status(400); throw new Error('Magic link is invalid or has expired'); }
+
+  user.magicToken = undefined;
+  user.magicTokenExpire = undefined;
+  user.lastSeenAt = new Date();
+  await user.save();
+
+  res.json({
+    _id: user._id,
+    name: user.name,
+    email: user.email,
+    phone: user.phone,
+    role: user.role,
+    plan: user.plan,
+    isVerified: user.isVerified,
+    avatar: user.avatar,
+    businessName: user.businessName,
+    token: generateToken(user._id),
+  });
+});
+
 module.exports = {
   register, login, getMe, updateProfile,
   verifyEmail, verifyOTP, resendVerification,
   forgotPassword, resetPassword, resetPasswordWithOTP,
+  magicLogin,
 };

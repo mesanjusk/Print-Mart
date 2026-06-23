@@ -43,6 +43,8 @@ const userSchema = new mongoose.Schema({
   otpCode: { type: String },
   otpPurpose: { type: String, enum: ['verify_email', 'reset_password'] },
   otpExpire: { type: Date },
+  magicToken: { type: String },
+  magicTokenExpire: { type: Date },
 }, { timestamps: true });
 
 userSchema.pre('save', async function (next) {

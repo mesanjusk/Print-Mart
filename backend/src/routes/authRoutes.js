@@ -4,6 +4,7 @@ const {
   register, login, getMe, updateProfile,
   verifyEmail, verifyOTP, resendVerification,
   forgotPassword, resetPassword, resetPasswordWithOTP,
+  magicLogin,
 } = require('../controllers/authController');
 const { protect } = require('../middleware/authMiddleware');
 
@@ -23,5 +24,7 @@ router.post('/forgot-password', forgotPassword);
 router.post('/reset-password', resetPassword);
 // Password reset — WhatsApp OTP flow
 router.post('/reset-password-otp', resetPasswordWithOTP);
+// Magic link login (WhatsApp one-time link)
+router.get('/magic-login', magicLogin);
 
 module.exports = router;

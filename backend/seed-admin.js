@@ -1,9 +1,11 @@
 /**
- * Run once to create the super admin:
+ * Run once to create the superadmin user:
+ *   MONGO_URI=<your-uri> node seed-admin.js
+ *
+ * Or put MONGO_URI in .env and run:
  *   node seed-admin.js
  *
- * Set these before running (or put in .env):
- *   MONGO_URI=your-mongodb-uri
+ * Prefer seed-superadmin.js for a cleaner, dedicated script.
  */
 require('dotenv').config();
 const mongoose = require('mongoose');
@@ -12,9 +14,9 @@ const bcrypt = require('bcryptjs');
 // ── Edit these ──────────────────────────────────────────
 const ADMIN = {
   name:     'Super Admin',
-  email:    'admin@printmart.in',   // change this
-  password: 'Admin@1234',           // change this
-  phone:    '919876543210',         // change this (with country code)
+  email:    'superadmin@printmart.in',
+  password: 'SuperAdmin@123',
+  phone:    '919000000000',         // with country code
 };
 // ────────────────────────────────────────────────────────
 
@@ -26,12 +28,14 @@ async function main() {
 
   const exists = await User.findOne({ email: ADMIN.email });
   if (exists) {
-    exists.role = 'admin';
+    exists.role = 'superadmin';
+    exists.isVerified = true;
+    exists.isActive = true;
     await exists.save();
-    console.log(`✅ Existing user "${ADMIN.email}" promoted to admin.`);
+    console.log(`✅ Existing user "${ADMIN.email}" promoted to superadmin.`);
   } else {
-    await User.create({ ...ADMIN, role: 'admin' });
-    console.log(`✅ Admin created: ${ADMIN.email} / ${ADMIN.password}`);
+    await User.create({ ...ADMIN, role: 'superadmin', isVerified: true, isActive: true });
+    console.log(`✅ Superadmin created: ${ADMIN.email} / ${ADMIN.password}`);
   }
 
   await mongoose.disconnect();

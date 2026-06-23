@@ -30,6 +30,7 @@ app.use(cors({
     if (
       ALLOWED_ORIGINS.includes(origin) ||
       /\.vercel\.app$/.test(origin) ||
+      /\.onrender\.com$/.test(origin) ||
       /^http:\/\/localhost(:\d+)?$/.test(origin)
     ) return callback(null, true);
     callback(new Error(`CORS: origin ${origin} not allowed`));

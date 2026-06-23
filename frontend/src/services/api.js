@@ -121,6 +121,14 @@ export const waAdminAPI = {
   // Templates
   getTemplates: () => api.get('/admin/whatsapp/templates'),
   syncTemplates: () => api.post('/admin/whatsapp/templates/sync'),
+  // Bot config
+  getBotConfig: () => api.get('/admin/whatsapp/bot-config'),
+  updateBotConfig: (data) => api.put('/admin/whatsapp/bot-config', data),
+  // Bot tester
+  testBotCommand: (data) => api.post('/admin/whatsapp/bot-test', data),
+  // Session management
+  resetSession: (phone) => api.post(`/admin/whatsapp/sessions/${encodeURIComponent(phone)}/reset`),
+  deleteSession: (phone) => api.delete(`/admin/whatsapp/sessions/${encodeURIComponent(phone)}`),
 };
 
 export const compareAPI = {

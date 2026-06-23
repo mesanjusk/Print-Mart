@@ -3,6 +3,7 @@ const WhatsAppLog = require('../models/WhatsAppLog');
 const WhatsAppSession = require('../models/WhatsAppSession');
 const WhatsAppCampaign = require('../models/WhatsAppCampaign');
 const WhatsAppOptOut = require('../models/WhatsAppOptOut');
+const WhatsAppBotConfig = require('../models/WhatsAppBotConfig');
 const Order = require('../models/Order');
 const User = require('../models/User');
 const wa = require('../services/whatsapp');
@@ -59,17 +60,33 @@ const getLogs = asyncHandler(async (req, res) => {
 
 const getConversations = asyncHandler(async (req, res) => {
   const { page = 1, limit = 20, search } = req.query;
-  const filter = search ? { phone: { $regex: search } } : {};
+  const filter = search ? { $or: [{ phone: { $regex: search } }, { role: { $regex: search, $options: 'i' } }] } : {};
   const [sessions, total] = await Promise.all([
     WhatsAppSession.find(filter).populate('userId', 'name email role phone businessName').sort({ lastActivity: -1 }).skip((page - 1) * limit).limit(Number(limit)),
     WhatsAppSession.countDocuments(filter),
   ]);
   const now = Date.now();
   const conversations = await Promise.all(sessions.map(async (sess) => {
-    const messages = await WhatsAppLog.find({ phone: sess.phone }).sort({ createdAt: -1 }).limit(5);
+    const recentMessages = await WhatsAppLog.find({ phone: sess.phone }).sort({ createdAt: -1 }).limit(5);
     const windowOpen = sess.lastInboundAt && (now - new Date(sess.lastInboundAt).getTime()) < 24 * 60 * 60 * 1000;
-    const windowExpiresIn = windowOpen ? Math.round((new Date(sess.lastInboundAt).getTime() + 24 * 60 * 60 * 1000 - now) / 60000) : 0;
-    return { session: sess, recentMessages: messages.reverse(), windowOpen, windowExpiresIn };
+    const windowExpiresAt = sess.lastInboundAt ? new Date(new Date(sess.lastInboundAt).getTime() + 24 * 60 * 60 * 1000).toISOString() : null;
+    const lastMsg = recentMessages[0];
+    return {
+      phone: sess.phone,
+      name: sess.userId?.name || sess.userId?.businessName || null,
+      email: sess.userId?.email || null,
+      role: sess.role || sess.userId?.role || 'unknown',
+      state: sess.state,
+      userId: sess.userId,
+      lastActivity: sess.lastActivity,
+      lastInboundAt: sess.lastInboundAt,
+      windowOpen: !!windowOpen,
+      windowExpiresAt,
+      lastMessage: lastMsg?.message || lastMsg?.templateName || null,
+      lastDirection: lastMsg?.direction || null,
+      recentMessages: recentMessages.reverse(),
+      sessionId: sess._id,
+    };
   }));
   res.json({ conversations, total, page: Number(page), pages: Math.ceil(total / limit) });
 });
@@ -304,6 +321,149 @@ const syncTemplatesFromMeta = asyncHandler(async (req, res) => {
   }
 });
 
+// ─── Bot Config ───────────────────────────────────────────────────────────────
+
+const getBotConfig = asyncHandler(async (req, res) => {
+  let config = await WhatsAppBotConfig.findOne().populate('updatedBy', 'name email');
+  if (!config) config = await WhatsAppBotConfig.create({});
+  res.json(config);
+});
+
+const updateBotConfig = asyncHandler(async (req, res) => {
+  const allowed = ['botEnabled', 'welcomeBuyer', 'welcomeSeller', 'helpBuyer', 'helpSeller',
+    'unknownUserGreeting', 'fallbackMessage', 'guestInquiryPrompt', 'optOutConfirmation',
+    'optInConfirmation', 'customCommands'];
+  const update = {};
+  for (const key of allowed) {
+    if (req.body[key] !== undefined) update[key] = req.body[key];
+  }
+  update.updatedBy = req.user._id;
+
+  let config = await WhatsAppBotConfig.findOne();
+  if (!config) {
+    config = await WhatsAppBotConfig.create(update);
+  } else {
+    Object.assign(config, update);
+    await config.save();
+  }
+  res.json(config);
+});
+
+// ─── Session management ───────────────────────────────────────────────────────
+
+const resetSession = asyncHandler(async (req, res) => {
+  const phone = decodeURIComponent(req.params.phone);
+  const session = await WhatsAppSession.findOneAndUpdate(
+    { phone },
+    { state: 'idle', context: {} },
+    { new: true }
+  ).populate('userId', 'name email role');
+  if (!session) { res.status(404); throw new Error('Session not found'); }
+  res.json({ message: 'Session reset to idle', session });
+});
+
+const deleteSession = asyncHandler(async (req, res) => {
+  const phone = decodeURIComponent(req.params.phone);
+  await WhatsAppSession.findOneAndDelete({ phone });
+  res.json({ message: 'Session deleted' });
+});
+
+// ─── Bot command tester (simulates without sending real WA message) ───────────
+
+const testBotCommand = asyncHandler(async (req, res) => {
+  const { message, role = 'buyer', hasAccount = true } = req.body;
+  if (!message) { res.status(400); throw new Error('message is required'); }
+
+  const config = await WhatsAppBotConfig.findOne() || {};
+  const clientUrl = process.env.CLIENT_URL || 'https://print-mart.vercel.app';
+
+  const applyVars = (text, name = 'TestUser') =>
+    (text || '').replace(/\{\{name\}\}/g, name).replace(/\{\{clientUrl\}\}/g, clientUrl);
+
+  const t = message.trim().toUpperCase();
+  let simulatedResponses = [];
+
+  if (!hasAccount) {
+    if (['HI', 'HELLO', 'START', 'MENU', 'HEY'].some(k => t.startsWith(k))) {
+      simulatedResponses.push({ type: 'unknown_greeting', body: applyVars(config.unknownUserGreeting || 'Welcome to PrintMart! Reply REGISTER to sign up.') });
+    } else if (['REGISTER', 'JOIN', 'SIGNUP'].includes(t)) {
+      simulatedResponses.push({ type: 'registration_flow', body: '👋 Welcome to PrintMart!\n\nRegister as:\n1️⃣ BUYER – Browse & purchase\n2️⃣ SELLER – List & sell\n\nReply 1/BUYER or 2/SELLER' });
+    } else if (['INQUIRE', 'INQUIRY', 'ENQUIRE', 'QUOTE', 'PRICE'].includes(t)) {
+      simulatedResponses.push({ type: 'guest_inquiry', body: applyVars(config.guestInquiryPrompt || 'Send: Product | Qty | Name') });
+    } else {
+      simulatedResponses.push({ type: 'unknown_fallback', body: applyVars(config.unknownUserGreeting || 'Welcome! Reply REGISTER to get started.') });
+    }
+  } else if (role === 'buyer') {
+    if (['HI', 'HELLO', 'START', 'MENU', 'HEY'].some(k => t.startsWith(k))) {
+      simulatedResponses.push({ type: 'welcome_buyer', body: applyVars(config.welcomeBuyer || 'Welcome!', 'TestUser') });
+    } else if (t.startsWith('HELP')) {
+      simulatedResponses.push({ type: 'help_buyer', body: config.helpBuyer || 'Buyer commands...' });
+    } else if (t.startsWith('ORDERS')) {
+      simulatedResponses.push({ type: 'orders_list', body: '📦 Your Orders\n\n[Would list recent orders here]\n\nReply TRACK [order#] for tracking.' });
+    } else if (t.startsWith('QUOTES') || t === 'QUOTE') {
+      simulatedResponses.push({ type: 'quotes_list', body: '📋 Pending Quotations\n\n[Would list pending quotations here]\n\nReply ACCEPT or REJECT.' });
+    } else if (t.startsWith('STATUS')) {
+      simulatedResponses.push({ type: 'status', body: '📊 Your Status\n\n[Would show open inquiries and active orders]' });
+    } else if (t.startsWith('ACCEPT')) {
+      simulatedResponses.push({ type: 'accept_quote', body: '✅ [Would accept the latest pending quotation and create an order]' });
+    } else if (t.startsWith('REJECT')) {
+      simulatedResponses.push({ type: 'reject_quote', body: '❌ [Would reject the latest pending quotation]' });
+    } else if (t.startsWith('PAID ')) {
+      simulatedResponses.push({ type: 'payment_confirm', body: '✅ [Would confirm payment for order: ' + t.replace('PAID ', '') + ']' });
+    } else if (t.startsWith('TRACK ')) {
+      simulatedResponses.push({ type: 'track_order', body: '🚚 [Would show tracking info for order: ' + t.replace('TRACK ', '') + ']' });
+    } else if (t.startsWith('CANCEL ')) {
+      simulatedResponses.push({ type: 'cancel_order', body: '❌ [Would cancel order: ' + t.replace('CANCEL ', '') + ']' });
+    } else if (['STOP', 'UNSUBSCRIBE', 'OPTOUT'].includes(t)) {
+      simulatedResponses.push({ type: 'opt_out', body: config.optOutConfirmation || '✅ You have been unsubscribed.' });
+    } else if (['START', 'SUBSCRIBE', 'OPTIN'].includes(t)) {
+      simulatedResponses.push({ type: 'opt_in', body: config.optInConfirmation || '✅ You are now subscribed.' });
+    } else {
+      simulatedResponses.push({ type: 'fallback_or_inquiry_reply', body: config.fallbackMessage || 'Sorry, I didn\'t understand. Reply HELP for commands.' });
+    }
+  } else if (role === 'seller') {
+    if (['HI', 'HELLO', 'START', 'MENU', 'HEY'].some(k => t.startsWith(k))) {
+      simulatedResponses.push({ type: 'welcome_seller', body: applyVars(config.welcomeSeller || 'Welcome Seller!', 'TestUser') });
+    } else if (t.startsWith('HELP')) {
+      simulatedResponses.push({ type: 'help_seller', body: config.helpSeller || 'Seller commands...' });
+    } else if (t.startsWith('ORDERS')) {
+      simulatedResponses.push({ type: 'orders_list', body: '📦 Your Orders\n\n[Would list seller orders here]' });
+    } else if (t.startsWith('STATUS')) {
+      simulatedResponses.push({ type: 'status', body: '📊 Vendor Status\n\n[Would show pending inquiries and active orders]' });
+    } else if (t.startsWith('QUOTE ')) {
+      const parts = t.replace('QUOTE ', '').trim().split(/\s+/);
+      simulatedResponses.push({ type: 'send_quote', body: `✅ [Would create and send quotation for amount: ₹${parts[parts.length - 1]}]` });
+    } else if (t.startsWith('DISPATCH ')) {
+      simulatedResponses.push({ type: 'dispatch_order', body: '✅ [Would mark order as dispatched with tracking info]' });
+    } else if (t.startsWith('DELIVER ')) {
+      simulatedResponses.push({ type: 'deliver_order', body: '✅ [Would mark order as delivered]' });
+    } else if (['STOP', 'UNSUBSCRIBE', 'OPTOUT'].includes(t)) {
+      simulatedResponses.push({ type: 'opt_out', body: config.optOutConfirmation || '✅ Unsubscribed.' });
+    } else {
+      simulatedResponses.push({ type: 'fallback_or_inquiry_reply', body: config.fallbackMessage || 'Sorry, I didn\'t understand. Reply HELP.' });
+    }
+  }
+
+  // Check custom commands
+  const customCommands = config.customCommands || [];
+  const lower = message.toLowerCase().trim();
+  for (const cc of customCommands) {
+    if (!cc.active) continue;
+    const rolesMatch = !cc.roles?.length || cc.roles.includes('all') || cc.roles.includes(role);
+    if (!rolesMatch) continue;
+    let matches = false;
+    if (cc.matchType === 'exact') matches = lower === cc.keyword;
+    else if (cc.matchType === 'starts_with') matches = lower.startsWith(cc.keyword);
+    else matches = lower.includes(cc.keyword);
+    if (matches) {
+      simulatedResponses.unshift({ type: 'custom_command', keyword: cc.keyword, body: cc.response });
+      break;
+    }
+  }
+
+  res.json({ message, role, hasAccount, simulatedResponses });
+});
+
 module.exports = {
   getStats, getLogs,
   getConversations, getConversationByPhone, replyToConversation,
@@ -311,4 +471,6 @@ module.exports = {
   getCampaigns, createCampaign, updateCampaign, deleteCampaign, runCampaign,
   getOptOuts, addOptOut, removeOptOut,
   getWindowStatus, getTemplates, syncTemplatesFromMeta,
+  getBotConfig, updateBotConfig,
+  resetSession, deleteSession, testBotCommand,
 };

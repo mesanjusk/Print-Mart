@@ -4,7 +4,20 @@ const Quotation = require('../models/Quotation');
 const Order = require('../models/Order');
 const WhatsAppSession = require('../models/WhatsAppSession');
 const WhatsAppLog = require('../models/WhatsAppLog');
+const WhatsAppBotConfig = require('../models/WhatsAppBotConfig');
 const wa = require('../services/whatsapp');
+
+// ─── Config cache (1-minute TTL) ──────────────────────────────────────────────
+let _cachedConfig = null;
+let _cacheTime = 0;
+const getBotConfig = async () => {
+  if (_cachedConfig && Date.now() - _cacheTime < 60000) return _cachedConfig;
+  _cachedConfig = await WhatsAppBotConfig.findOne() || {};
+  _cacheTime = Date.now();
+  return _cachedConfig;
+};
+const applyVars = (text, name = '', clientUrl = '') =>
+  (text || '').replace(/\{\{name\}\}/g, name).replace(/\{\{clientUrl\}\}/g, clientUrl);
 
 // ─── Webhook verification ────────────────────────────────────────────────────
 
@@ -78,6 +91,8 @@ const parseCommand = (text) => {
 const handleBuyerMessage = async (phone, user, text, interactiveId, session) => {
   const cmd = interactiveId ? { cmd: interactiveId.toUpperCase() } : parseCommand(text);
   const upperText = text?.trim().toUpperCase();
+  const cfg = await getBotConfig();
+  const clientUrl = process.env.CLIENT_URL || 'https://print-mart.vercel.app';
 
   // Seller upgrade confirmation
   if (session?.state === 'upgrade_seller_confirm') {
@@ -106,10 +121,16 @@ const handleBuyerMessage = async (phone, user, text, interactiveId, session) => 
   }
 
   if (cmd.cmd === 'MENU') {
+    if (cfg.welcomeBuyer) {
+      return wa.sendTextMessage(phone, applyVars(cfg.welcomeBuyer, user.name, clientUrl), user._id);
+    }
     return wa.sendWelcomeBuyer(phone, user.name, user._id);
   }
 
   if (cmd.cmd === 'HELP') {
+    if (cfg.helpBuyer) {
+      return wa.sendTextMessage(phone, cfg.helpBuyer, user._id);
+    }
     return wa.sendHelpBuyer(phone, user._id);
   }
 
@@ -264,12 +285,13 @@ const handleBuyerMessage = async (phone, user, text, interactiveId, session) => 
   if (inquiry) {
     inquiry.replies.push({ sender: user._id, message: text });
     await inquiry.save();
-    // Notify seller of buyer reply
     if (inquiry.seller?.phone) {
       await wa.sendInquiryReplyToUser(inquiry.seller.phone, user.name, text, inquiry.seller._id);
     }
     return wa.sendTextMessage(phone, `✅ Your reply has been sent to the vendor.`, user._id);
   }
+  const fallback = cfg.fallbackMessage;
+  if (fallback) return wa.sendTextMessage(phone, fallback, user._id);
   return wa.sendWelcomeBuyer(phone, user.name, user._id);
 };
 
@@ -277,12 +299,20 @@ const handleBuyerMessage = async (phone, user, text, interactiveId, session) => 
 
 const handleSellerMessage = async (phone, user, text, interactiveId) => {
   const cmd = interactiveId ? { cmd: interactiveId.toUpperCase() } : parseCommand(text);
+  const cfg = await getBotConfig();
+  const clientUrl = process.env.CLIENT_URL || 'https://print-mart.vercel.app';
 
   if (cmd.cmd === 'MENU') {
+    if (cfg.welcomeSeller) {
+      return wa.sendTextMessage(phone, applyVars(cfg.welcomeSeller, user.name, clientUrl), user._id);
+    }
     return wa.sendWelcomeSeller(phone, user.name, user._id);
   }
 
   if (cmd.cmd === 'HELP') {
+    if (cfg.helpSeller) {
+      return wa.sendTextMessage(phone, cfg.helpSeller, user._id);
+    }
     return wa.sendHelpSeller(phone, user._id);
   }
 
@@ -408,6 +438,8 @@ const handleSellerMessage = async (phone, user, text, interactiveId) => {
     }
     return wa.sendTextMessage(phone, `✅ Reply sent to ${inquiry.buyer?.name || 'buyer'}.`, user._id);
   }
+  const fallback = cfg.fallbackMessage;
+  if (fallback) return wa.sendTextMessage(phone, fallback, user._id);
   return wa.sendWelcomeSeller(phone, user.name, user._id);
 };
 
@@ -421,6 +453,8 @@ const handleUnknownUser = async (phone, text, session) => {
   const cmd = text?.trim().toUpperCase();
   const state = session?.state || 'idle';
   const ctx = session?.context || {};
+  const cfg = await getBotConfig();
+  const clientUrl = process.env.CLIENT_URL || 'https://print-mart.vercel.app';
 
   // Entry points
   if (state === 'idle' || !state.startsWith('reg_')) {
@@ -430,14 +464,9 @@ const handleUnknownUser = async (phone, text, session) => {
       session.context = {};
       await session.save();
       return wa.sendTextMessage(phone,
-        `📩 *Send an Inquiry – No Registration Needed!*\n\n` +
-        `Just tell us what you're looking for:\n\n` +
-        `Type your message in this format:\n` +
-        `*Product name | Quantity | Your name*\n\n` +
-        `Example:\n` +
-        `_Business Cards | 500 pcs | Rahul_\n\n` +
-        `We'll forward your inquiry to relevant sellers and they'll contact you here on WhatsApp! 📱\n\n` +
-        `💡 Register for free to track all your inquiries: reply *REGISTER*`
+        cfg.guestInquiryPrompt
+          ? applyVars(cfg.guestInquiryPrompt, '', clientUrl)
+          : `📩 *Send an Inquiry – No Registration Needed!*\n\nType: *Product | Quantity | Your name*\n\nExample:\n_Business Cards | 500 pcs | Rahul_\n\nReply *REGISTER* to create a free account.`
       );
     }
 
@@ -454,12 +483,10 @@ const handleUnknownUser = async (phone, text, session) => {
       );
     }
     // Default unknown user message
-    return wa.sendTextMessage(phone,
-      `👋 Welcome to *PrintMart*!\n\n` +
-      `You don't have an account yet.\n\n` +
-      `📝 To register, reply *REGISTER*\n` +
-      `🌐 Or sign up at: ${process.env.CLIENT_URL || 'https://print-mart.vercel.app'}/register`
-    );
+    const greeting = cfg.unknownUserGreeting
+      ? applyVars(cfg.unknownUserGreeting, '', clientUrl)
+      : `👋 Welcome to *PrintMart*!\n\nYou don't have an account yet.\n\n📝 To register, reply *REGISTER*\n🌐 Or sign up at: ${clientUrl}/register`;
+    return wa.sendTextMessage(phone, greeting);
   }
 
   // Step 1: choose role
@@ -615,10 +642,9 @@ const handleUnknownUser = async (phone, text, session) => {
   session.context = {};
   await session.save();
   return wa.sendTextMessage(phone,
-    `👋 Welcome to *PrintMart*!\n\n` +
-    `📩 *INQUIRE* – Send an inquiry without registering\n` +
-    `📝 *REGISTER* – Create a free account\n\n` +
-    `Reply with a command to get started.`
+    cfg.unknownUserGreeting
+      ? applyVars(cfg.unknownUserGreeting, '', clientUrl)
+      : `👋 Welcome to *PrintMart*!\n\n📩 *INQUIRE* – Send an inquiry without registering\n📝 *REGISTER* – Create a free account\n\nReply with a command to get started.`
   );
 };
 

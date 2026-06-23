@@ -94,6 +94,27 @@ const sendListMessage = async (to, bodyText, buttonLabel, sections, userId) => {
 
 // ─── Template Messages (Meta pre-approved required for business-initiated) ───
 
+// Send a contact card — recipient sees native Call + Send Message buttons
+const sendContactCard = async (to, contact, userId) => {
+  const { name, businessName, phone } = contact;
+  const cleanPhone = phone.replace(/\D/g, '');
+  const e164 = cleanPhone.startsWith('91') ? `+${cleanPhone}` : `+91${cleanPhone}`;
+  const waId = cleanPhone.startsWith('91') ? cleanPhone : `91${cleanPhone}`;
+  const displayName = businessName || name;
+
+  const payload = {
+    type: 'contacts',
+    contacts: [{
+      name: { formatted_name: displayName, first_name: displayName },
+      org: { company: businessName || '' },
+      phones: [{ phone: e164, type: 'CELL', wa_id: waId }],
+    }],
+  };
+  const result = await sendRaw(to, payload);
+  await logMessage({ direction: 'outbound', phone: normalisePhone(to), userId, messageType: 'contact', message: `Contact: ${displayName}`, waMessageId: result?.messages?.[0]?.id });
+  return result;
+};
+
 const sendTemplateMessage = async (to, templateName, languageCode, components, userId) => {
   const payload = {
     type: 'template',
@@ -448,6 +469,7 @@ module.exports = {
   sendDeliveryConfirmation,
   sendQuotationResponse,
   sendCancellationNotice,
+  sendContactCard,
   sendBroadcast,
   sendBuyerReplyNotificationToSeller,
   broadcastInquiryToSellers,

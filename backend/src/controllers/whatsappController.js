@@ -604,13 +604,10 @@ const handleUnknownUser = async (phone, text, interactiveId, session) => {
       );
 
       if (sellers.length > 0) {
-        // Send seller contacts to the guest
-        await wa.sendTextMessage(phone, `📋 We found *${sellers.length}* seller(s) for *${product}* on PrintMart:`);
+        // Send seller contacts to the guest as contact cards (shows native Call + WhatsApp buttons)
+        await wa.sendTextMessage(phone, `📋 We found *${sellers.length}* seller(s) for *${product}* on PrintMart. Tap a contact to call or WhatsApp them directly:`);
         for (const s of sellers) {
-          const cleanPhone = s.phone.replace(/\D/g, '');
-          await wa.sendTextMessage(phone,
-            `🏪 *${s.businessName || s.name}*\n📞 ${s.phone}\n💬 wa.me/${cleanPhone}`
-          );
+          await wa.sendContactCard(phone, s);
         }
 
         // Notify each matching seller about this guest inquiry

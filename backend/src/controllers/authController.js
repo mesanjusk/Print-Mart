@@ -77,7 +77,8 @@ const login = asyncHandler(async (req, res) => {
   let user;
   if (phone) {
     const normalizedPhone = phone.replace(/\D/g, '');
-    user = await User.findOne({ phone: normalizedPhone });
+    const last10 = normalizedPhone.slice(-10);
+    user = await User.findOne({ phone: { $regex: last10 } });
   } else if (email) {
     user = await User.findOne({ email: email.toLowerCase() });
   }

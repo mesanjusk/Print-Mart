@@ -780,7 +780,8 @@ const webhookReceive = async (req, res) => {
               await wa.sendTextMessage(from,
                 `👋 Welcome back, *${user.name}*!\n\n` +
                 `You already have a PrintMart account.\n\n` +
-                `📧 Email: ${user.email}\n` +
+                (user.email ? `📧 Email: ${user.email}\n` : '') +
+                `📱 Phone: ${user.phone}\n` +
                 `👤 Role: ${user.role}\n` +
                 `🔑 Temp Password: *${tempPassword}*\n\n` +
                 `🔗 Login: ${loginUrl}/login\n\n` +

@@ -176,11 +176,12 @@ const verifyOTP = asyncHandler(async (req, res) => {
     user.isVerified = true;
     user.emailVerifyToken = undefined;
     user.emailVerifyExpire = undefined;
+    user.otpCode = undefined;
+    user.otpPurpose = undefined;
+    user.otpExpire = undefined;
+    await user.save();
   }
-  user.otpCode = undefined;
-  user.otpPurpose = undefined;
-  user.otpExpire = undefined;
-  await user.save();
+  // For 'reset_password', keep OTP intact so resetPasswordWithOTP can validate and consume it
 
   res.json({ message: 'OTP verified', userId: user._id });
 });

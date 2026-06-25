@@ -665,34 +665,30 @@ const handleUnknownUser = async (phone, text, interactiveId, session, profileNam
         session.userId || null
       ).catch(() => {});
 
-      // Send seller notifications with direct call/WhatsApp links
+      // Send seller contacts to buyer as CTA button cards (one per seller)
       if (sellers.length > 0) {
-        // Build seller contact list for buyer
-        const sellerLines = sellers.map((s, i) => {
+        for (const s of sellers) {
           const sellerClean = s.phone.replace(/\D/g, '');
-          const waNum = sellerClean.startsWith('91') ? sellerClean : `91${sellerClean}`;
+          const sellerWaNum = sellerClean.startsWith('91') ? sellerClean : `91${sellerClean}`;
           const displayName = s.businessName || s.name;
-          return `${i + 1}. *${displayName}*\n   📞 Call: +${waNum}\n   💬 WhatsApp: https://wa.me/${waNum}`;
-        }).join('\n\n');
+          await wa.sendCtaUrlMessage(
+            phone,
+            `🏪 *${displayName}*\n📞 +${sellerWaNum}`,
+            'Chat on WhatsApp',
+            `https://wa.me/${sellerWaNum}`,
+            session.userId || null
+          ).catch(() => {});
+        }
 
-        await wa.sendTextMessage(phone,
-          `🏪 *Sellers who can help you:*\n\n${sellerLines}\n\nTap any link above to call or chat directly!`,
-          session.userId || null
-        ).catch(() => {});
-
-        // Notify each seller with buyer's direct contact links
+        // Notify each seller — buyer contact as CTA button card
         const guestClean = phone.replace(/\D/g, '');
         const buyerWaNum = guestClean.startsWith('91') ? guestClean : `91${guestClean}`;
         for (const s of sellers) {
-          await wa.sendTextMessage(s.phone,
-            `🔔 *New Inquiry – PrintMart*\n\n` +
-            `━━━━━━━━━━━━━━━━━━━━\n` +
-            `📦 *Product:* ${product}\n` +
-            `📊 *Quantity:* ${qty}\n` +
-            `👤 *Buyer:* ${buyerName}\n` +
-            `━━━━━━━━━━━━━━━━━━━━\n\n` +
-            `📞 Call buyer: +${buyerWaNum}\n` +
-            `💬 WhatsApp: https://wa.me/${buyerWaNum}`,
+          await wa.sendCtaUrlMessage(
+            s.phone,
+            `🔔 *New Inquiry – PrintMart*\n\n📦 *Product:* ${product}\n📊 *Quantity:* ${qty}\n👤 *Buyer:* ${buyerName}\n📞 +${buyerWaNum}`,
+            'Chat with Buyer',
+            `https://wa.me/${buyerWaNum}`,
             s._id
           ).catch(() => {});
         }
@@ -770,28 +766,28 @@ const handleUnknownUser = async (phone, text, interactiveId, session, profileNam
       );
 
       if (sellers.length > 0) {
-        // Send direct call/WhatsApp links to the guest
-        const sellerLines = sellers.map((s, i) => {
+        // Send seller contacts to guest as CTA button cards (one per seller)
+        for (const s of sellers) {
           const sellerClean = s.phone.replace(/\D/g, '');
-          const waNum = sellerClean.startsWith('91') ? sellerClean : `91${sellerClean}`;
+          const sellerWaNum = sellerClean.startsWith('91') ? sellerClean : `91${sellerClean}`;
           const displayName = s.businessName || s.name;
-          return `${i + 1}. *${displayName}*\n   📞 Call: +${waNum}\n   💬 WhatsApp: https://wa.me/${waNum}`;
-        }).join('\n\n');
-        await wa.sendTextMessage(phone,
-          `🏪 *Sellers who can help you:*\n\n${sellerLines}\n\nTap any link above to call or chat directly!`
-        ).catch(() => {});
+          await wa.sendCtaUrlMessage(
+            phone,
+            `🏪 *${displayName}*\n📞 +${sellerWaNum}`,
+            'Chat on WhatsApp',
+            `https://wa.me/${sellerWaNum}`
+          ).catch(() => {});
+        }
 
-        // Notify each matching seller about this guest inquiry
+        // Notify each seller — buyer contact as CTA button card
         const guestClean = phone.replace(/\D/g, '');
         const buyerWaNum = guestClean.startsWith('91') ? guestClean : `91${guestClean}`;
         for (const s of sellers) {
-          await wa.sendTextMessage(s.phone,
-            `🔔 *New Guest Inquiry – PrintMart*\n\n` +
-            `📦 *Product:* ${product}\n` +
-            `📊 *Quantity:* ${qty}\n` +
-            `👤 *Buyer:* ${guestName}\n\n` +
-            `📞 Call buyer: +${buyerWaNum}\n` +
-            `💬 WhatsApp: https://wa.me/${buyerWaNum}`,
+          await wa.sendCtaUrlMessage(
+            s.phone,
+            `🔔 *New Guest Inquiry – PrintMart*\n\n📦 *Product:* ${product}\n📊 *Quantity:* ${qty}\n👤 *Buyer:* ${guestName}\n📞 +${buyerWaNum}`,
+            'Chat with Buyer',
+            `https://wa.me/${buyerWaNum}`,
             s._id
           ).catch(() => {});
         }

@@ -111,14 +111,13 @@ const handleBuyerMessage = async (phone, user, text, interactiveId, session) => 
     session.markModified('context');
     await session.save();
     const magicLink = await generateMagicLink(user);
-    return wa.sendTextMessage(phone,
+    return wa.sendCtaUrlMessage(phone,
       `🎉 *You're now a Seller on PrintMart!*\n\n` +
       `🏪 Business: *${bizName}*\n` +
       `📍 City: *${city}*\n\n` +
-      `🔗 *Login to add your products:*\n${magicLink}\n\n` +
       `⚠️ Link expires in 30 minutes.\n` +
       `Add GSTIN and bank details from your Profile after login.`,
-      user._id
+      'Open Dashboard', magicLink, user._id
     );
   }
 
@@ -591,8 +590,9 @@ const handleUnknownUser = async (phone, text, interactiveId, session, profileNam
       const existingUser = await User.findOne({ phone: { $regex: last10r } });
       if (existingUser) {
         const magicLink = await generateMagicLink(existingUser);
-        return wa.sendTextMessage(phone,
-          `🔑 *Login Link*\n\nHi *${existingUser.name}*! Click below to login and set your password:\n\n🔗 ${magicLink}\n\n⚠️ Link expires in 30 minutes.\nGo to Profile → Change Password after logging in.`
+        return wa.sendCtaUrlMessage(phone,
+          `🔑 *Password Reset*\n\nHi *${existingUser.name}*!\n\nTap below to login and set your password.\n⚠️ Link expires in 30 minutes.\nGo to Profile → Change Password after logging in.`,
+          'Reset Password', magicLink
         );
       }
       return wa.sendTextMessage(phone, `⚠️ No account found for this number.\n\nReply *SELL* to join as a seller.`);
@@ -977,15 +977,15 @@ const handleUnknownUser = async (phone, text, interactiveId, session, profileNam
       session.markModified('context');
       await session.save();
 
-      const magicLink = await generateMagicLink(phoneExists);
-      return wa.sendTextMessage(phone,
+      const magicLink = await generateMagicLink(phoneExists, '/dashboard/inquiries');
+      return wa.sendCtaUrlMessage(phone,
         `✅ *Registration Complete!*\n\n` +
         `👤 Name: ${name}\n` +
         (email ? `📧 Email: ${email}\n` : '') +
         `📱 Phone: +${phone}\n` +
         `👤 Role: ${phoneExists.role}\n\n` +
-        `🔗 *Click to login & set your password:*\n${magicLink}\n\n` +
-        `⚠️ Link expires in 30 minutes.\nReply *MENU* to continue.`
+        `⚠️ Link expires in 30 minutes.`,
+        'Login Now', magicLink
       );
     }
 
@@ -1006,17 +1006,17 @@ const handleUnknownUser = async (phone, text, interactiveId, session, profileNam
       session.markModified('context');
       await session.save();
 
-      const magicLink = await generateMagicLink(user);
+      const magicLink = await generateMagicLink(user, '/dashboard/inquiries');
 
-      await wa.sendTextMessage(phone,
+      await wa.sendCtaUrlMessage(phone,
         `✅ *Registration Successful!*\n\n` +
         `👤 Name: ${name}\n` +
         (email ? `📧 Email: ${email}\n` : '') +
         `📱 Phone: ${withPlus}\n` +
         `👤 Role: ${role || 'buyer'}\n\n` +
-        `🔗 *Click to login & set your password:*\n${magicLink}\n\n` +
         `⚠️ Link expires in 30 minutes.\n` +
-        `Add your email in Profile for notifications after login.`
+        `Add your email in Profile for notifications after login.`,
+        'Login Now', magicLink
       );
 
       console.log(`[WA-Register] New ${role} account: ${name} (${email || 'no email'}) from ${withPlus}`);
@@ -1085,8 +1085,9 @@ const handleUnknownUser = async (phone, text, interactiveId, session, profileNam
     if (phoneExistsSell) {
       session.state = 'idle'; session.context = {}; await session.save();
       const magicLink = await generateMagicLink(phoneExistsSell);
-      return wa.sendTextMessage(phone,
-        `👋 *${phoneExistsSell.name}*, you already have an account!\n\n🔗 Click to login:\n${magicLink}\n\n⚠️ Link expires in 30 minutes.`
+      return wa.sendCtaUrlMessage(phone,
+        `👋 *${phoneExistsSell.name}*, you already have an account!\n\n⚠️ Link expires in 30 minutes.`,
+        'Login Now', magicLink
       );
     }
 
@@ -1108,17 +1109,17 @@ const handleUnknownUser = async (phone, text, interactiveId, session, profileNam
       session.markModified('context');
       await session.save();
 
-      const magicLink = await generateMagicLink(newSeller);
+      const magicLink = await generateMagicLink(newSeller, '/dashboard/profile');
 
-      return wa.sendTextMessage(phone,
+      return wa.sendCtaUrlMessage(phone,
         `🎉 *Welcome to PrintMart as a Seller!*\n\n` +
         `👤 Name: ${name}\n` +
         `🏪 Business: ${businessName}\n` +
         `📍 City: ${city}\n` +
         `📱 Phone: ${withPlus}\n\n` +
-        `🔗 *Login to add your products:*\n${magicLink}\n\n` +
         `⚠️ Link expires in 30 minutes.\n` +
-        `Add email, GSTIN and bank details from your Profile after login.`
+        `Add email, GSTIN and bank details from your Profile after login.`,
+        'Open Dashboard', magicLink
       );
     } catch (err) {
       console.error('[WA-Sell] Error creating seller account:', err.code, err.message);
@@ -1269,26 +1270,25 @@ const webhookReceive = async (req, res) => {
             // REGISTER — already registered: send magic login link
             if (['REGISTER', 'JOIN', 'SIGNUP', 'NEW ACCOUNT', 'START'].includes(upperText) && user) {
               const magicLink = await generateMagicLink(user);
-              await wa.sendTextMessage(from,
+              await wa.sendCtaUrlMessage(from,
                 `👋 Welcome back, *${user.name}*!\n\n` +
                 `You already have a PrintMart account.\n\n` +
                 (user.email ? `📧 Email: ${user.email}\n` : '') +
                 `📱 Phone: ${user.phone}\n` +
                 `👤 Role: ${user.role}\n\n` +
-                `🔗 *Click to login & change password:*\n${magicLink}\n\n` +
-                `⚠️ Link expires in 30 minutes.\n` +
-                `Reply *MENU* after logging in.`
+                `⚠️ Link expires in 30 minutes.`,
+                'Login Now', magicLink
               );
 
             // RESET — send magic login link
             } else if (upperText === 'RESET' && user) {
               const magicLink = await generateMagicLink(user);
-              await wa.sendTextMessage(from,
+              await wa.sendCtaUrlMessage(from,
                 `🔑 *Password Reset*\n\n` +
-                `Click the link below to login and set a new password:\n\n` +
-                `🔗 ${magicLink}\n\n` +
+                `Tap below to login and set a new password.\n\n` +
                 `⚠️ Link expires in 30 minutes.\n` +
-                `Go to Profile → Change Password after logging in.`
+                `Go to Profile → Change Password after logging in.`,
+                'Reset Password', magicLink
               );
 
             // SELLER — buyer requesting upgrade (collect mandatory business details)

@@ -331,28 +331,68 @@ const handleSellerMessage = async (phone, user, text, interactiveId) => {
   }
 
   if (cmd.cmd === 'STATUS') {
+    const total = await Inquiry.countDocuments({ seller: user._id, status: { $in: ['pending', 'responded'] } });
+    if (total === 0) {
+      return wa.sendButtonMessage(phone,
+        `📊 *Vendor Status – PrintMart*\n\nNo pending inquiries. 🎉`,
+        [{ id: 'ORDERS', title: 'My Orders' }, { id: 'MENU', title: 'Main Menu' }],
+        user._id
+      );
+    }
     const inquiries = await Inquiry.find({ seller: user._id, status: { $in: ['pending', 'responded'] } })
-      .populate('buyer', 'name').populate('product', 'name').sort({ createdAt: -1 }).limit(5);
-    const orders = await Order.find({ seller: user._id, status: { $in: ['paid', 'processing', 'dispatched'] } })
-      .sort({ createdAt: -1 }).limit(5);
+      .populate('buyer', 'name phone').populate('product', 'name').sort({ createdAt: -1 }).limit(3);
 
-    let body = `📊 *Vendor Status – PrintMart*\n\n`;
-    if (inquiries.length) {
-      body += `*Pending Inquiries (${inquiries.length}):*\n`;
-      inquiries.forEach((inq, i) => {
-        const shortId = String(inq._id).slice(-6).toUpperCase();
-        body += `${i + 1}. INQ-${shortId} – ${inq.product?.name || 'Product'} from ${inq.buyer?.name || 'Buyer'} [${inq.status}]\n`;
-      });
-      body += '\n';
-    }
-    if (orders.length) {
-      body += `*Active Orders (${orders.length}):*\n`;
-      orders.forEach((o, i) => {
-        body += `${i + 1}. ${o.orderNumber} – ₹${o.total.toFixed(2)} [${o.status.replace('_', ' ')}]\n`;
-      });
-    }
-    if (!inquiries.length && !orders.length) body += `No pending inquiries or active orders. 🎉`;
-    return wa.sendTextMessage(phone, body, user._id);
+    const sellerSess = await WhatsAppSession.findOne({ phone });
+    if (sellerSess) { sellerSess.context = { ...sellerSess.context, inqOffset: 3 }; await sellerSess.save(); }
+
+    let body = `📊 *You have ${total} pending ${total === 1 ? 'inquiry' : 'inquiries'}*\n\n`;
+    inquiries.forEach((inq, i) => {
+      const bp = (inq.buyer?.phone || '').replace(/\D/g, '');
+      const bNum = bp.startsWith('91') ? bp : (bp.length === 10 ? `91${bp}` : bp);
+      const dt = inq.createdAt ? new Date(inq.createdAt).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true }) : '';
+      body += `━━━━━━━━━━━━━━━━\n`;
+      body += `*${i + 1}. ${inq.product?.name || 'Product'}*\n`;
+      body += `   👤 ${inq.buyer?.name || 'Buyer'}\n`;
+      if (bNum) body += `   📞 +${bNum}\n`;
+      body += `   📦 Qty: ${inq.quantity || 1}\n`;
+      body += `   🕐 ${dt}\n`;
+    });
+
+    const btns = [];
+    if (total > 3) btns.push({ id: 'MORE_INQ', title: `More (${total - 3} left)` });
+    btns.push({ id: 'ORDERS', title: 'My Orders' });
+    if (btns.length < 3) btns.push({ id: 'MENU', title: 'Main Menu' });
+    return wa.sendButtonMessage(phone, body, btns, user._id);
+  }
+
+  if (cmd.cmd === 'MORE_INQ') {
+    const sellerSess = await WhatsAppSession.findOne({ phone });
+    const offset = sellerSess?.context?.inqOffset || 3;
+    const total = await Inquiry.countDocuments({ seller: user._id, status: { $in: ['pending', 'responded'] } });
+    const inquiries = await Inquiry.find({ seller: user._id, status: { $in: ['pending', 'responded'] } })
+      .populate('buyer', 'name phone').populate('product', 'name').sort({ createdAt: -1 }).skip(offset).limit(3);
+    if (!inquiries.length) return wa.sendTextMessage(phone, `No more inquiries.`, user._id);
+
+    if (sellerSess) { sellerSess.context = { ...sellerSess.context, inqOffset: offset + 3 }; await sellerSess.save(); }
+
+    let body = `📋 *Inquiries ${offset + 1}–${offset + inquiries.length} of ${total}*\n\n`;
+    inquiries.forEach((inq, i) => {
+      const bp = (inq.buyer?.phone || '').replace(/\D/g, '');
+      const bNum = bp.startsWith('91') ? bp : (bp.length === 10 ? `91${bp}` : bp);
+      const dt = inq.createdAt ? new Date(inq.createdAt).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true }) : '';
+      body += `━━━━━━━━━━━━━━━━\n`;
+      body += `*${offset + i + 1}. ${inq.product?.name || 'Product'}*\n`;
+      body += `   👤 ${inq.buyer?.name || 'Buyer'}\n`;
+      if (bNum) body += `   📞 +${bNum}\n`;
+      body += `   📦 Qty: ${inq.quantity || 1}\n`;
+      body += `   🕐 ${dt}\n`;
+    });
+
+    const btns = [];
+    if (offset + 3 < total) btns.push({ id: 'MORE_INQ', title: `More (${total - offset - 3} left)` });
+    btns.push({ id: 'ORDERS', title: 'My Orders' });
+    if (btns.length < 3) btns.push({ id: 'MENU', title: 'Main Menu' });
+    return wa.sendButtonMessage(phone, body, btns, user._id);
   }
 
   if (cmd.cmd === 'ORDERS') {
@@ -677,7 +717,7 @@ const handleUnknownUser = async (phone, text, interactiveId, session, profileNam
         session.userId || null
       );
 
-      // Per seller: 1 message — call link in body + Chat button
+      // Per seller: Chat button + Call button (2 CTA messages, both as buttons)
       if (sellers.length > 0) {
         for (const s of sellers) {
           const sellerClean = s.phone.replace(/\D/g, '');
@@ -685,28 +725,46 @@ const handleUnknownUser = async (phone, text, interactiveId, session, profileNam
           const displayName = s.businessName || s.name;
           await wa.sendCtaUrlMessage(
             phone,
-            `🏪 *${displayName}*\n📞 +${sellerWaNum}\n📲 Call: ${CLIENT}/call?phone=${sellerWaNum}`,
+            `🏪 *${displayName}*\n📞 +${sellerWaNum}`,
             'Chat on WhatsApp',
             `https://wa.me/${sellerWaNum}`,
             session.userId || null
           ).catch(() => {});
+          await wa.sendCtaUrlMessage(
+            phone,
+            `📞 Call *${displayName}*`,
+            'Call Now',
+            `${CLIENT}/call?phone=${sellerWaNum}`,
+            session.userId || null
+          ).catch(() => {});
         }
 
-        // Notify sellers: 1 message each — buyer call link in body + Chat button
+        // Notify sellers only if within 24-hour messaging window
         const guestClean = phone.replace(/\D/g, '');
         const buyerWaNum = guestClean.startsWith('91') ? guestClean : `91${guestClean}`;
+        const cutoff24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
         for (const s of sellers) {
+          const sellerNorm = s.phone.replace(/\D/g, '');
+          const withinWindow = await WhatsAppLog.exists({ phone: sellerNorm, direction: 'inbound', createdAt: { $gte: cutoff24h } });
+          if (!withinWindow) continue;
           await wa.sendCtaUrlMessage(
             s.phone,
-            `🔔 *New Inquiry – PrintMart*\n\n📦 *Product:* ${product}\n📊 *Quantity:* ${qty}\n👤 *Buyer:* ${buyerName}\n📞 +${buyerWaNum}\n📲 Call: ${CLIENT}/call?phone=${buyerWaNum}`,
+            `🔔 *New Inquiry – PrintMart*\n\n📦 *Product:* ${product}\n📊 *Quantity:* ${qty}\n👤 *Buyer:* ${buyerName}\n📞 +${buyerWaNum}`,
             'Chat with Buyer',
             `https://wa.me/${buyerWaNum}`,
+            s._id
+          ).catch(() => {});
+          await wa.sendCtaUrlMessage(
+            s.phone,
+            `📞 Call *${buyerName}*`,
+            'Call Now',
+            `${CLIENT}/call?phone=${buyerWaNum}`,
             s._id
           ).catch(() => {});
         }
       }
 
-      // 30-second reminder if buyer doesn't respond
+      // 60-second reminder if buyer doesn't respond
       const reminderRef = Date.now();
       setTimeout(async () => {
         try {
@@ -721,7 +779,7 @@ const handleUnknownUser = async (phone, text, interactiveId, session, profileNam
         } catch (e) {
           console.error('[WA-Bot] Reminder error:', e.message);
         }
-      }, 30000);
+      }, 60000);
 
     } catch (sellerLookupErr) {
       console.error('[WA-Bot] Seller lookup error:', sellerLookupErr.message);
@@ -786,28 +844,45 @@ const handleUnknownUser = async (phone, text, interactiveId, session, profileNam
       );
 
       if (sellers.length > 0) {
-        // Per seller: 1 message — call link in body + Chat button
+        // Per seller: Chat button + Call button (both as CTA buttons)
         for (const s of sellers) {
           const sellerClean = s.phone.replace(/\D/g, '');
           const sellerWaNum = sellerClean.startsWith('91') ? sellerClean : `91${sellerClean}`;
           const displayName = s.businessName || s.name;
           await wa.sendCtaUrlMessage(
             phone,
-            `🏪 *${displayName}*\n📞 +${sellerWaNum}\n📲 Call: ${CLIENT}/call?phone=${sellerWaNum}`,
+            `🏪 *${displayName}*\n📞 +${sellerWaNum}`,
             'Chat on WhatsApp',
             `https://wa.me/${sellerWaNum}`
           ).catch(() => {});
+          await wa.sendCtaUrlMessage(
+            phone,
+            `📞 Call *${displayName}*`,
+            'Call Now',
+            `${CLIENT}/call?phone=${sellerWaNum}`
+          ).catch(() => {});
         }
 
-        // Notify sellers: 1 message each — buyer call link in body + Chat button
+        // Notify sellers only if within 24-hour messaging window
         const guestClean = phone.replace(/\D/g, '');
         const buyerWaNum = guestClean.startsWith('91') ? guestClean : `91${guestClean}`;
+        const cutoff24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
         for (const s of sellers) {
+          const sellerNorm = s.phone.replace(/\D/g, '');
+          const withinWindow = await WhatsAppLog.exists({ phone: sellerNorm, direction: 'inbound', createdAt: { $gte: cutoff24h } });
+          if (!withinWindow) continue;
           await wa.sendCtaUrlMessage(
             s.phone,
-            `🔔 *New Inquiry – PrintMart*\n\n📦 *Product:* ${product}\n📊 *Quantity:* ${qty}\n👤 *Buyer:* ${guestName}\n📞 +${buyerWaNum}\n📲 Call: ${CLIENT}/call?phone=${buyerWaNum}`,
+            `🔔 *New Inquiry – PrintMart*\n\n📦 *Product:* ${product}\n📊 *Quantity:* ${qty}\n👤 *Buyer:* ${guestName}\n📞 +${buyerWaNum}`,
             'Chat with Buyer',
             `https://wa.me/${buyerWaNum}`,
+            s._id
+          ).catch(() => {});
+          await wa.sendCtaUrlMessage(
+            s.phone,
+            `📞 Call *${guestName}*`,
+            'Call Now',
+            `${CLIENT}/call?phone=${buyerWaNum}`,
             s._id
           ).catch(() => {});
         }

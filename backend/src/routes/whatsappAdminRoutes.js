@@ -11,7 +11,7 @@ const {
 } = require('../controllers/whatsappAdminController');
 
 const {
-  getCommands, createCommand, updateCommand, deleteCommand, resetToDefault,
+  getCommands, createCommand, updateCommand, deleteCommand, resetToDefault, reorderCommands,
 } = require('../controllers/botCommandController');
 
 const adminOnly = [protect, authorize('admin')];
@@ -39,6 +39,7 @@ router.post('/templates/sync', ...adminOnly, syncTemplatesFromMeta);
 // Bot Commands (CMS for WhatsApp bot responses)
 router.get('/bot-commands', ...adminOnly, getCommands);
 router.post('/bot-commands', ...adminOnly, createCommand);
+router.post('/bot-commands/reorder', ...adminOnly, reorderCommands);
 router.put('/bot-commands/:id', ...adminOnly, updateCommand);
 router.delete('/bot-commands/:id', ...adminOnly, deleteCommand);
 router.post('/bot-commands/:id/reset', ...adminOnly, resetToDefault);

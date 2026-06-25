@@ -166,7 +166,7 @@ const ensureSeeded = async () => {
 exports.getCommands = async (req, res) => {
   try {
     await ensureSeeded();
-    const commands = await BotCommand.find().sort({ role: 1, key: 1 });
+    const commands = await BotCommand.find().sort({ role: 1, priority: 1, key: 1 });
     res.json(commands);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -249,6 +249,19 @@ exports.resetToDefault = async (req, res) => {
     cmd.isActive = defaults.isActive;
     await cmd.save();
     res.json(cmd);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+exports.reorderCommands = async (req, res) => {
+  try {
+    const { orderedIds } = req.body;
+    if (!Array.isArray(orderedIds)) return res.status(400).json({ message: 'orderedIds must be an array' });
+    await Promise.all(orderedIds.map((id, idx) =>
+      BotCommand.findByIdAndUpdate(id, { priority: idx * 10 })
+    ));
+    res.json({ message: 'Order saved' });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

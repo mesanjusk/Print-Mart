@@ -129,6 +129,7 @@ export const waAdminAPI = {
   updateBotCommand: (id, data) => api.put(`/admin/whatsapp/bot-commands/${id}`, data),
   deleteBotCommand: (id) => api.delete(`/admin/whatsapp/bot-commands/${id}`),
   resetBotCommand: (id) => api.post(`/admin/whatsapp/bot-commands/${id}/reset`),
+  reorderBotCommands: (orderedIds) => api.post('/admin/whatsapp/bot-commands/reorder', { orderedIds }),
 };
 
 export const compareAPI = {

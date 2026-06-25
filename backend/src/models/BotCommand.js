@@ -22,6 +22,7 @@ const botCommandSchema = new mongoose.Schema({
   },
   isActive: { type: Boolean, default: true },
   isSystem: { type: Boolean, default: false },
+  priority: { type: Number, default: 0 },
 }, { timestamps: true });
 
 module.exports = mongoose.model('BotCommand', botCommandSchema);

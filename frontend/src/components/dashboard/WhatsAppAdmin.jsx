@@ -1024,12 +1024,21 @@ const ROLE_STYLES = {
 };
 const ROLE_ORDER = ['guest', 'buyer', 'seller', 'any'];
 
-function CommandCard({ cmd, onEdit, onDelete, onReset, onToggleActive }) {
+function CommandCard({ cmd, onEdit, onDelete, onReset, onToggleActive,
+                        onDragStart, onDragOver, onDrop, onDragEnd, isDragTarget }) {
   const s = ROLE_STYLES[cmd.role] || ROLE_STYLES.any;
   return (
-    <div className={`card border ${s.border} overflow-hidden`}>
+    <div
+      draggable
+      onDragStart={onDragStart}
+      onDragOver={(e) => { e.preventDefault(); onDragOver?.(); }}
+      onDrop={(e) => { e.preventDefault(); onDrop?.(); }}
+      onDragEnd={onDragEnd}
+      className={`card border overflow-hidden transition-all cursor-grab active:cursor-grabbing ${isDragTarget ? 'border-blue-400 shadow-lg scale-[1.01]' : s.border}`}
+    >
       <div className={`px-4 py-2.5 ${s.header} border-b flex items-center justify-between gap-2`}>
         <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+          <span className="text-gray-300 hover:text-gray-500 select-none text-base leading-none" title="Drag to reorder">⠿</span>
           <span className="font-mono text-xs font-bold text-gray-700 truncate">{cmd.key}</span>
           <span className={`text-xs px-1.5 py-0.5 rounded-full whitespace-nowrap ${s.badge}`}>{ROLE_STYLES[cmd.role]?.label || cmd.role}</span>
           {cmd.isSystem && <span className="text-xs px-1.5 py-0.5 rounded-full bg-yellow-100 text-yellow-700 whitespace-nowrap">System</span>}
@@ -1251,6 +1260,8 @@ function BotFlowPanel() {
   const [editModal, setEditModal] = useState(null);
   const [createModal, setCreateModal] = useState(false);
   const [saving, setSaving] = useState(false);
+  const dragInfo = useRef(null);
+  const [dragState, setDragState] = useState({ role: null, toIdx: null });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1270,6 +1281,34 @@ function BotFlowPanel() {
     (acc[cmd.role] = acc[cmd.role] || []).push(cmd);
     return acc;
   }, {});
+
+  const handleDragStart = (role, idx) => {
+    dragInfo.current = { role, idx };
+  };
+
+  const handleDragOver = (role, idx) => {
+    if (dragInfo.current?.role === role) setDragState({ role, toIdx: idx });
+  };
+
+  const handleDragEnd = () => {
+    setDragState({ role: null, toIdx: null });
+    dragInfo.current = null;
+  };
+
+  const handleDrop = async (role, toIdx) => {
+    const from = dragInfo.current;
+    if (!from || from.role !== role || from.idx === toIdx) { handleDragEnd(); return; }
+    const roleItems = commands.filter(c => c.role === role);
+    const others = commands.filter(c => c.role !== role);
+    const reordered = [...roleItems];
+    const [moved] = reordered.splice(from.idx, 1);
+    reordered.splice(toIdx, 0, moved);
+    setCommands([...others, ...reordered]);
+    handleDragEnd();
+    try {
+      await waAdminAPI.reorderBotCommands(reordered.map(c => c._id));
+    } catch { toast.error('Failed to save order'); }
+  };
 
   const handleSave = async (data, isNew) => {
     setSaving(true);
@@ -1328,8 +1367,8 @@ function BotFlowPanel() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold text-gray-800">Bot Flow Commands</h2>
-          <p className="text-xs text-gray-500 mt-0.5">Edit WhatsApp bot responses — changes apply immediately for new messages</p>
+          <h2 className="text-lg font-semibold text-gray-800">Bot Flow Builder</h2>
+          <p className="text-xs text-gray-500 mt-0.5">Drag to reorder commands · Edit responses · Changes apply immediately</p>
         </div>
         <button onClick={() => setCreateModal(true)} className="btn-primary flex items-center gap-1.5 text-sm">
           <FiPlus size={14} /> Add Command
@@ -1340,7 +1379,7 @@ function BotFlowPanel() {
         <FiAlertCircle size={15} className="text-amber-500 mt-0.5 flex-shrink-0" />
         <div className="text-xs text-amber-800 space-y-1">
           <p className="font-medium">How bot commands work</p>
-          <p>Edit message text and buttons here — the bot uses these responses in real time. System commands (yellow badge) can't be deleted but can be reset to defaults. Use <code className="bg-amber-100 px-1 rounded font-mono">{"{name}"}</code> in message text for the user's name. Trigger keywords shown here are for reference only — actual routing is in the code.</p>
+          <p>Edit message text and buttons here — the bot uses these responses in real time. System commands (yellow badge) can't be deleted but can be reset to defaults. Use <code className="bg-amber-100 px-1 rounded font-mono">{"{name}"}</code> in message text for the user's name. <strong>Drag cards by the ⠿ handle to reorder</strong> — order is saved automatically.</p>
         </div>
       </div>
 
@@ -1354,10 +1393,15 @@ function BotFlowPanel() {
               <span className="text-xs font-normal text-gray-400">{cmds.length} command{cmds.length !== 1 ? 's' : ''}</span>
             </h3>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {cmds.map(cmd => (
+              {cmds.map((cmd, idx) => (
                 <CommandCard key={cmd._id} cmd={cmd}
                   onEdit={setEditModal} onDelete={handleDelete}
                   onReset={handleReset} onToggleActive={toggleActive}
+                  onDragStart={() => handleDragStart(role, idx)}
+                  onDragOver={() => handleDragOver(role, idx)}
+                  onDrop={() => handleDrop(role, idx)}
+                  onDragEnd={handleDragEnd}
+                  isDragTarget={dragState.role === role && dragState.toIdx === idx && dragInfo.current?.idx !== idx}
                 />
               ))}
             </div>

@@ -3,9 +3,9 @@ const bcrypt = require('bcryptjs');
 
 const userSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
-  email: { type: String, required: true, unique: true, lowercase: true },
+  email: { type: String, sparse: true, unique: true, lowercase: true },
   password: { type: String, required: true, minlength: 6 },
-  phone: { type: String },
+  phone: { type: String, required: true, unique: true },
   role: { type: String, enum: ['buyer', 'seller', 'admin', 'superadmin'], default: 'buyer' },
   avatar: { type: String, default: '' },
   isVerified: { type: Boolean, default: false },
@@ -43,6 +43,8 @@ const userSchema = new mongoose.Schema({
   otpCode: { type: String },
   otpPurpose: { type: String, enum: ['verify_email', 'reset_password'] },
   otpExpire: { type: Date },
+  magicToken: { type: String },
+  magicTokenExpire: { type: Date },
 }, { timestamps: true });
 
 userSchema.pre('save', async function (next) {

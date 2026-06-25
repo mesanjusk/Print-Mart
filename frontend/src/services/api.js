@@ -27,15 +27,14 @@ export const authAPI = {
   register: (data) => api.post('/auth/register', data),
   login: (data) => api.post('/auth/login', data),
   forgotPassword: (email) => api.post('/auth/forgot-password', { email }),
-  resetPassword: (data) => api.put('/auth/reset-password', data),
+  resetPassword: (token, password) => api.post('/auth/reset-password', { token, password }),
   getMe: () => api.get('/auth/me'),
   updateProfile: (data) => api.put('/auth/profile', data),
-  forgotPassword: (email) => api.post('/auth/forgot-password', { email }),
-  resetPassword: (token, password) => api.post('/auth/reset-password', { token, password }),
   resetPasswordWithOTP: (userId, otp, password) => api.post('/auth/reset-password-otp', { userId, otp, password }),
   verifyEmail: (token) => api.get(`/auth/verify-email?token=${token}`),
   verifyOTP: (otp, purpose) => api.post('/auth/verify-otp', { otp, purpose }),
   resendVerification: () => api.post('/auth/resend-verification'),
+  magicLogin: (token) => api.get(`/auth/magic-login?token=${token}`),
 };
 
 export const productAPI = {
@@ -52,6 +51,9 @@ export const productAPI = {
 export const categoryAPI = {
   getAll: () => api.get('/categories'),
   getBySlug: (slug) => api.get(`/categories/${slug}`),
+  create: (data) => api.post('/categories', data),
+  update: (id, data) => api.put(`/categories/${id}`, data),
+  remove: (id) => api.delete(`/categories/${id}`),
 };
 
 export const inquiryAPI = {
@@ -121,6 +123,13 @@ export const waAdminAPI = {
   // Templates
   getTemplates: () => api.get('/admin/whatsapp/templates'),
   syncTemplates: () => api.post('/admin/whatsapp/templates/sync'),
+  // Bot Commands
+  getBotCommands: () => api.get('/admin/whatsapp/bot-commands'),
+  createBotCommand: (data) => api.post('/admin/whatsapp/bot-commands', data),
+  updateBotCommand: (id, data) => api.put(`/admin/whatsapp/bot-commands/${id}`, data),
+  deleteBotCommand: (id) => api.delete(`/admin/whatsapp/bot-commands/${id}`),
+  resetBotCommand: (id) => api.post(`/admin/whatsapp/bot-commands/${id}/reset`),
+  reorderBotCommands: (orderedIds) => api.post('/admin/whatsapp/bot-commands/reorder', { orderedIds }),
 };
 
 export const compareAPI = {
@@ -148,6 +157,15 @@ export const offerAPI = {
   create: (data) => api.post('/offers', data),
   update: (id, data) => api.put(`/offers/${id}`, data),
   remove: (id) => api.delete(`/offers/${id}`),
+};
+
+export const bulkAPI = {
+  getCategories: () => api.get('/admin/bulk/catalog'),
+  importCategories: (data) => api.post('/admin/bulk/categories', data),
+  importProducts: (data) => api.post('/admin/bulk/products', data),
+  importSellers: (data) => api.post('/admin/bulk/sellers', data),
+  confirmSellerOTP: (email, otp) => api.post('/admin/bulk/sellers/confirm-otp', { email, otp }),
+  addSeller: (data) => api.post('/admin/bulk/seller', data),
 };
 
 export default api;

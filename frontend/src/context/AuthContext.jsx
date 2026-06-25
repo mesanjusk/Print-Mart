@@ -22,9 +22,9 @@ export function AuthProvider({ children }) {
       .catch(() => {}); // silently ignore if token expired
   }, []);
 
-  const login = async (email, password) => {
+  const login = async (phone, password) => {
     setLoading(true);
-    const { data } = await authAPI.login({ email, password });
+    const { data } = await authAPI.login({ phone, password });
     localStorage.setItem('token', data.token);
     localStorage.setItem('user', JSON.stringify(data));
     setUser(data);

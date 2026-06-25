@@ -1,10 +1,12 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { authAPI } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import toast from 'react-hot-toast';
 
 export default function ProfileSettings() {
   const { user, updateUser } = useAuth();
+  const navigate = useNavigate();
   const [form, setForm] = useState({
     name: user?.name || '',
     phone: user?.phone || '',
@@ -32,7 +34,7 @@ export default function ProfileSettings() {
       const { data } = await authAPI.updateProfile(payload);
       updateUser(data);
       toast.success('Profile updated!');
-      setForm({ ...form, newPassword: '' });
+      navigate('/');
     } catch {
       toast.error('Update failed');
     } finally {

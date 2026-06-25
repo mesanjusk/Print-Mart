@@ -58,15 +58,15 @@ export default function HomePage() {
           <p className="text-lg md:text-xl opacity-90 mb-8">
             From visiting cards to large format banners — quality printing delivered to your door
           </p>
-          <form onSubmit={handleSearch} className="flex max-w-2xl mx-auto">
+          <form onSubmit={handleSearch} className="flex max-w-2xl mx-auto w-full">
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search business cards, banners, brochures..."
-              className="flex-grow px-5 py-3 text-gray-800 rounded-l-lg outline-none text-base"
+              className="flex-1 min-w-0 px-5 py-3 text-gray-800 rounded-l-lg outline-none text-base"
             />
-            <button type="submit" className="bg-gray-900 hover:bg-gray-800 px-6 py-3 rounded-r-lg flex items-center gap-2 font-semibold transition-colors">
+            <button type="submit" className="flex-shrink-0 bg-gray-900 hover:bg-gray-800 px-4 py-3 rounded-r-lg flex items-center gap-2 font-semibold transition-colors text-sm">
               <FiSearch /> Search
             </button>
           </form>

@@ -1,7 +1,7 @@
 import { Routes, Route, NavLink } from 'react-router-dom';
 import {
   FiGrid, FiPackage, FiMessageSquare, FiHeart, FiUser,
-  FiFileText, FiShoppingBag, FiImage, FiUsers, FiTag
+  FiFileText, FiShoppingBag, FiImage, FiUsers, FiTag, FiList
 } from 'react-icons/fi';
 import { useAuth } from '../context/AuthContext';
 import DashboardHome from '../components/dashboard/DashboardHome';
@@ -16,6 +16,8 @@ import MyOrders from '../components/dashboard/MyOrders';
 import WhatsAppAdmin from '../components/dashboard/WhatsAppAdmin';
 import DesignLibrary from '../components/dashboard/DesignLibrary';
 import AdminUsers from '../components/dashboard/AdminUsers';
+import AdminBulk from '../components/dashboard/AdminBulk';
+import ManageCategories from '../components/dashboard/ManageCategories';
 
 const linkCls = ({ isActive }) =>
   `flex items-center gap-2 px-3 py-2 rounded text-sm font-medium transition-colors ${
@@ -25,7 +27,7 @@ const linkCls = ({ isActive }) =>
 export default function DashboardPage() {
   const { user } = useAuth();
   const isSeller = user?.role === 'seller';
-  const isAdmin = user?.role === 'admin';
+  const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
   const isBuyer = user?.role === 'buyer';
 
   return (
@@ -79,6 +81,7 @@ export default function DashboardPage() {
                     <p className="text-xs font-semibold text-gray-400 px-3 uppercase tracking-wide">Admin</p>
                   </div>
                   <NavLink to="/dashboard/admin/users" className={linkCls}><FiUsers /> Manage Users</NavLink>
+                  <NavLink to="/dashboard/admin/categories" className={linkCls}><FiList /> Categories</NavLink>
                   <NavLink
                     to="/dashboard/whatsapp-admin"
                     className={linkCls}
@@ -89,6 +92,7 @@ export default function DashboardPage() {
                     WhatsApp Admin
                   </NavLink>
                   <NavLink to="/dashboard/all-orders" className={linkCls}><FiShoppingBag /> All Orders</NavLink>
+                  <NavLink to="/dashboard/bulk-import" className={linkCls}><FiUsers /> Bulk Import</NavLink>
                 </>
               )}
             </nav>
@@ -116,8 +120,10 @@ export default function DashboardPage() {
             {isAdmin && (
               <>
                 <Route path="admin/users" element={<AdminUsers />} />
+                <Route path="admin/categories" element={<ManageCategories />} />
                 <Route path="whatsapp-admin" element={<WhatsAppAdmin />} />
                 <Route path="all-orders" element={<ManageOrders />} />
+                <Route path="bulk-import" element={<AdminBulk />} />
               </>
             )}
           </Routes>

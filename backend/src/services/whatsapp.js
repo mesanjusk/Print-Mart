@@ -67,6 +67,24 @@ const sendButtonMessage = async (to, bodyText, buttons, userId) => {
   return result;
 };
 
+// Send CTA URL button message — button tap opens a URL (single button only)
+const sendCtaUrlMessage = async (to, bodyText, displayText, url, userId) => {
+  const payload = {
+    type: 'interactive',
+    interactive: {
+      type: 'cta_url',
+      body: { text: bodyText },
+      action: {
+        name: 'cta_url',
+        parameters: { display_text: displayText.slice(0, 20), url },
+      },
+    },
+  };
+  const result = await sendRaw(to, payload);
+  await logMessage({ direction: 'outbound', phone: normalisePhone(to), userId, messageType: 'interactive', message: bodyText, waMessageId: result?.messages?.[0]?.id });
+  return result;
+};
+
 // Send interactive list message
 const sendListMessage = async (to, bodyText, buttonLabel, sections, userId) => {
   const payload = {
@@ -93,6 +111,27 @@ const sendListMessage = async (to, bodyText, buttonLabel, sections, userId) => {
 };
 
 // ─── Template Messages (Meta pre-approved required for business-initiated) ───
+
+// Send a contact card — recipient sees native Call + Send Message buttons
+const sendContactCard = async (to, contact, userId) => {
+  const { name, businessName, phone } = contact;
+  const cleanPhone = phone.replace(/\D/g, '');
+  const e164 = cleanPhone.startsWith('91') ? `+${cleanPhone}` : `+91${cleanPhone}`;
+  const waId = cleanPhone.startsWith('91') ? cleanPhone : `91${cleanPhone}`;
+  const displayName = businessName || name;
+
+  const payload = {
+    type: 'contacts',
+    contacts: [{
+      name: { formatted_name: displayName, first_name: displayName },
+      org: { company: businessName || '' },
+      phones: [{ phone: e164, type: 'CELL', wa_id: waId }],
+    }],
+  };
+  const result = await sendRaw(to, payload);
+  await logMessage({ direction: 'outbound', phone: normalisePhone(to), userId, messageType: 'contact', message: `Contact: ${displayName}`, waMessageId: result?.messages?.[0]?.id });
+  return result;
+};
 
 const sendTemplateMessage = async (to, templateName, languageCode, components, userId) => {
   const payload = {
@@ -219,29 +258,38 @@ const sendHelpSeller = async (phone, userId) => {
   return sendTextMessage(phone, body, userId);
 };
 
-const sendInquiryNotificationToSeller = async (sellerPhone, buyerName, productName, message, quantity, unit, inquiryId, userId) => {
+const sendInquiryNotificationToSeller = async (sellerPhone, buyerName, productName, message, quantity, unit, inquiryId, userId, buyerPhone) => {
   if (!sellerPhone) return null;
   const shortId = String(inquiryId).slice(-6).toUpperCase();
   const body =
     `🔔 *New Inquiry – PrintMart*\n\n` +
-    `*Buyer:* ${buyerName}\n` +
-    `*Product:* ${productName}\n` +
-    `*Quantity:* ${quantity} ${unit}\n` +
-    `*Message:* ${message}\n` +
-    `*Ref:* INQ-${shortId}\n\n` +
-    `Reply here to respond to this inquiry, or send:\n` +
-    `*QUOTE [amount]* to create a quotation\n` +
-    `e.g.  QUOTE 5000`;
-  return sendTextMessage(sellerPhone, body, userId);
+    `━━━━━━━━━━━━━━━━━━━━\n` +
+    `📦 *Product:* ${productName}\n` +
+    `📊 *Qty:* ${quantity} ${unit}\n` +
+    `💬 *Message:* ${message}\n` +
+    `🔖 *Ref:* INQ-${shortId}\n` +
+    `━━━━━━━━━━━━━━━━━━━━\n\n` +
+    `👤 *Buyer:* ${buyerName}\n` +
+    (buyerPhone ? `📱 *WhatsApp:* wa.me/${String(buyerPhone).replace(/\D/g, '')}\n` : '') +
+    `\nReply *QUOTE [amount]* to send your best price.\ne.g.  QUOTE 5000`;
+  await sendTextMessage(sellerPhone, body, userId);
+  if (buyerPhone) {
+    const cleanBuyer = String(buyerPhone).replace(/\D/g, '');
+    await sendContactCard(sellerPhone, { name: buyerName, businessName: '', phone: cleanBuyer }, userId).catch(() => {});
+  }
 };
 
-const sendInquiryConfirmationToBuyer = async (buyerPhone, productName, sellerBusiness, userId) => {
+const sendInquiryConfirmationToBuyer = async (buyerPhone, productName, sellerBusiness, userId, sellerPhone) => {
   if (!buyerPhone) return null;
+  const cleanSeller = sellerPhone ? sellerPhone.replace(/\D/g, '') : null;
   const body =
     `✅ *Inquiry Submitted – PrintMart*\n\n` +
     `Your inquiry for *${productName}* has been sent to *${sellerBusiness}*.\n\n` +
-    `You will receive a WhatsApp notification when the seller responds.\n\n` +
-    `Reply to this chat to add more details to your inquiry.`;
+    (cleanSeller
+      ? `📞 *Contact seller directly on WhatsApp:*\n💬 wa.me/${cleanSeller}\n\n`
+      : ``) +
+    `You will also receive a message here when the seller responds.\n\n` +
+    `Reply *STATUS* to check your inquiry status.`;
   return sendTextMessage(buyerPhone, body, userId);
 };
 
@@ -408,7 +456,7 @@ const sendMorningDigest = async (sellerPhone, sellerName, pendingCount, offerCou
     `📬 *Pending Leads:* ${pendingCount}\n` +
     `🔥 *Active Offers:* ${offerCount}\n\n` +
     `Log in to respond and grow your business!\n` +
-    `👉 https://app.instify.in/dashboard/inquiries`;
+    `👉 https://shop.instify.in/dashboard/inquiries`;
   return sendTextMessage(sellerPhone, body);
 };
 const verifyWebhook = (mode, token, challenge) => {
@@ -429,6 +477,7 @@ module.exports = {
   sendPasswordResetOTP,
   sendTextMessage,
   sendButtonMessage,
+  sendCtaUrlMessage,
   sendListMessage,
   sendWelcomeBuyer,
   sendWelcomeSeller,
@@ -444,6 +493,7 @@ module.exports = {
   sendDeliveryConfirmation,
   sendQuotationResponse,
   sendCancellationNotice,
+  sendContactCard,
   sendBroadcast,
   sendBuyerReplyNotificationToSeller,
   broadcastInquiryToSellers,

@@ -1,0 +1,43 @@
+/* PrintMart WhatsApp Bot Flow — shared dark theme */
+
+@keyframes waFadeUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0);   }
+}
+
+@keyframes waBounce {
+  0%, 60%, 100% { transform: translateY(0);   }
+  30%           { transform: translateY(-5px); }
+}
+
+.wa-fade-up {
+  animation: waFadeUp 0.25s ease both;
+}
+
+/* Typing dots */
+.wa-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #8696A0;
+  animation: waBounce 1.2s infinite;
+}
+.wa-dot:nth-child(2) { animation-delay: 0.2s; }
+.wa-dot:nth-child(3) { animation-delay: 0.4s; }
+
+/* Scrollbar */
+.wa-chat::-webkit-scrollbar       { width: 4px; }
+.wa-chat::-webkit-scrollbar-track { background: transparent; }
+.wa-chat::-webkit-scrollbar-thumb { background: #2A3942; border-radius: 2px; }
+
+/* Input */
+.wa-input::placeholder { color: #8696A0; }
+.wa-input:focus        { outline: none; }
+.wa-input:disabled     { opacity: 0.5; cursor: not-allowed; }
+
+/* Btn hover effects */
+.wa-btn-call:hover    { background: rgba(37,211,102,0.08) !important; }
+.wa-btn-msg:hover     { background: rgba(83,189,235,0.08) !important; }
+.wa-btn-reply:hover   { opacity: 0.85; }
+.wa-btn-track:hover   { opacity: 0.88; }

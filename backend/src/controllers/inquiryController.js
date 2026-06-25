@@ -44,7 +44,8 @@ const createInquiry = asyncHandler(async (req, res) => {
         quantity,
         unit,
         inquiry._id,
-        inquiry.seller._id
+        inquiry.seller._id,
+        inquiry.buyer?.phone
       );
     }
     if (inquiry.seller?.pushEnabled && inquiry.seller?.pushSubscription?.endpoint) {
@@ -66,7 +67,8 @@ const createInquiry = asyncHandler(async (req, res) => {
         req.user.phone,
         inquiry.product?.name || 'the product',
         inquiry.seller?.businessName || inquiry.seller?.name || 'the seller',
-        req.user._id
+        req.user._id,
+        inquiry.seller?.phone
       );
     }
   } catch (err) {

@@ -4,6 +4,8 @@ import { FiSearch, FiMapPin, FiPackage } from 'react-icons/fi';
 import { supplierAPI } from '../services/api';
 import Spinner from '../components/common/Spinner';
 
+const CITIES = ['Gondia', 'Nagpur', 'Mumbai', 'Pune', 'Delhi'];
+
 export default function SuppliersPage() {
   const [suppliers, setSuppliers] = useState([]);
   const [pagination, setPagination] = useState({ page: 1, pages: 1, total: 0 });
@@ -13,17 +15,25 @@ export default function SuppliersPage() {
 
   const page = Number(searchParams.get('page')) || 1;
   const search = searchParams.get('keyword') || '';
+  const city = searchParams.get('city') || '';
 
   useEffect(() => {
     setLoading(true);
-    supplierAPI.getAll({ keyword: search, page })
+    supplierAPI.getAll({ keyword: search, page, city })
       .then((r) => {
         setSuppliers(Array.isArray(r.data.suppliers) ? r.data.suppliers : []);
         setPagination({ page: r.data.page || 1, pages: r.data.pages || 1, total: r.data.total || 0 });
       })
       .catch(() => setSuppliers([]))
       .finally(() => setLoading(false));
-  }, [search, page]);
+  }, [search, page, city]);
+
+  const handleCityChange = (selected) => {
+    const p = new URLSearchParams(searchParams);
+    if (selected) p.set('city', selected); else p.delete('city');
+    p.delete('page');
+    setSearchParams(p);
+  };
 
   const handleSearch = (e) => {
     e.preventDefault();
@@ -36,13 +46,33 @@ export default function SuppliersPage() {
     <div className="max-w-7xl mx-auto px-4 py-8">
       <h1 className="text-2xl font-bold text-gray-800 mb-6">Find Printing Suppliers</h1>
 
-      <form onSubmit={handleSearch} className="flex gap-3 mb-8 max-w-lg">
+      <form onSubmit={handleSearch} className="flex gap-3 mb-4 max-w-lg">
         <input type="text" value={keyword} onChange={(e) => setKeyword(e.target.value)}
           placeholder="Search by company or product..." className="input flex-grow" />
         <button type="submit" className="btn-primary px-6">Search</button>
       </form>
 
-      <p className="text-sm text-gray-500 mb-4">{pagination.total} suppliers found</p>
+      {/* City / Location filter */}
+      <div className="flex flex-wrap items-center gap-2 mb-6">
+        <span className="text-sm text-gray-500 flex items-center gap-1"><FiMapPin size={14} /> Suppliers Near:</span>
+        <button
+          onClick={() => handleCityChange('')}
+          className={`px-3 py-1 rounded-full text-sm border transition-colors ${!city ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-600 border-gray-200 hover:border-green-400'}`}
+        >
+          All Cities
+        </button>
+        {CITIES.map((c) => (
+          <button
+            key={c}
+            onClick={() => handleCityChange(c)}
+            className={`px-3 py-1 rounded-full text-sm border transition-colors ${city === c ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-600 border-gray-200 hover:border-green-400'}`}
+          >
+            {c}
+          </button>
+        ))}
+      </div>
+
+      <p className="text-sm text-gray-500 mb-4">{pagination.total} suppliers found{city ? ` in ${city}` : ''}</p>
 
       {loading ? (
         <div className="py-16"><Spinner size="lg" /></div>

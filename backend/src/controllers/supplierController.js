@@ -3,12 +3,13 @@ const User = require('../models/User');
 const Product = require('../models/Product');
 
 const getSuppliers = asyncHandler(async (req, res) => {
-  const { keyword, page = 1, limit = 20 } = req.query;
+  const { keyword, page = 1, limit = 20, city } = req.query;
   const query = { role: 'seller', isActive: true };
   if (keyword) query.$or = [
     { name: { $regex: keyword, $options: 'i' } },
     { businessName: { $regex: keyword, $options: 'i' } },
   ];
+  if (city) query['address.city'] = { $regex: city, $options: 'i' };
   const total = await User.countDocuments(query);
   const suppliers = await User.find(query)
     .select('-password')

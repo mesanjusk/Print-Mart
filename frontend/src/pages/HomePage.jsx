@@ -127,6 +127,30 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* AI Recommended Products */}
+      {featured.length > 0 && (
+        <section className="py-10 px-4">
+          <div className="max-w-7xl mx-auto">
+            <div className="flex items-center justify-between mb-2">
+              <div>
+                <h2 className="text-2xl font-bold text-gray-800">✨ Recommended For You</h2>
+                <p className="text-xs text-gray-400 mt-0.5">AI Recommended – Smart picks for you</p>
+              </div>
+              <Link to="/products?sort=popular" className="text-green-600 hover:text-green-700 flex items-center gap-1 text-sm font-medium">
+                See All <FiArrowRight />
+              </Link>
+            </div>
+            <div className="flex gap-4 overflow-x-auto pb-2 -mx-4 px-4" style={{ scrollbarWidth: 'none' }}>
+              {featured.slice(0, 6).map((p) => (
+                <div key={p._id} className="flex-shrink-0 w-44">
+                  <ProductCard product={p} />
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
       {/* Featured Products */}
       {featured.length > 0 && (
         <section className="py-10 px-4 bg-gray-50">

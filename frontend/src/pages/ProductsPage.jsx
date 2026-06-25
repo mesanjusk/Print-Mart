@@ -5,6 +5,23 @@ import { productAPI, categoryAPI } from '../services/api';
 import ProductCard from '../components/products/ProductCard';
 import Spinner from '../components/common/Spinner';
 
+const CATEGORY_PILLS = [
+  { emoji: '📦', label: 'All', value: '' },
+  { emoji: '🖨️', label: 'Printing', value: 'printing' },
+  { emoji: '📋', label: 'Stationery', value: 'stationery' },
+  { emoji: '🎁', label: 'Packaging', value: 'packaging' },
+  { emoji: '🏷️', label: 'Labels', value: 'labels' },
+  { emoji: '🖼️', label: 'Banners', value: 'banners' },
+  { emoji: '📚', label: 'Books', value: 'books' },
+];
+
+const BUDGETS = [
+  { label: 'Under ₹500', value: '500' },
+  { label: 'Under ₹1,000', value: '1000' },
+  { label: 'Under ₹5,000', value: '5000' },
+  { label: 'Any Budget', value: '' },
+];
+
 export default function ProductsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [products, setProducts] = useState([]);
@@ -46,6 +63,31 @@ export default function ProductsPage() {
     setSearchParams(p);
   };
 
+  const handlePillClick = (value) => {
+    const p = new URLSearchParams(searchParams);
+    if (!value) {
+      p.delete('keyword');
+      p.delete('category');
+    } else {
+      const match = categories.find((c) => c.name.toLowerCase().includes(value));
+      if (match) {
+        p.set('category', match._id);
+        p.delete('keyword');
+      } else {
+        p.set('keyword', value);
+        p.delete('category');
+      }
+    }
+    p.delete('page');
+    setSearchParams(p);
+  };
+
+  const activePill = CATEGORY_PILLS.find((pill) => {
+    if (!pill.value) return !keyword && !category;
+    const match = categories.find((c) => c.name.toLowerCase().includes(pill.value));
+    return match ? category === match._id : keyword === pill.value;
+  })?.value ?? '';
+
   return (
     <div className="max-w-7xl mx-auto px-4 py-6">
       <div className="flex items-center justify-between mb-4">
@@ -71,6 +113,23 @@ export default function ProductsPage() {
             <FiFilter /> Filters
           </button>
         </div>
+      </div>
+
+      {/* Category pills */}
+      <div className="flex gap-2 overflow-x-auto pb-2 mb-4 -mx-4 px-4" style={{ scrollbarWidth: 'none' }}>
+        {CATEGORY_PILLS.map((pill) => (
+          <button
+            key={pill.label}
+            onClick={() => handlePillClick(pill.value)}
+            className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-medium border transition-colors ${
+              activePill === pill.value
+                ? 'bg-blue-600 text-white border-blue-600'
+                : 'bg-white text-gray-600 border-gray-200 hover:border-blue-400'
+            }`}
+          >
+            <span>{pill.emoji}</span> {pill.label}
+          </button>
+        ))}
       </div>
 
       <div className="flex gap-6">
@@ -116,6 +175,23 @@ export default function ProductsPage() {
 
         {/* Products Grid */}
         <div className="flex-grow">
+          {/* Budget filters */}
+          <div className="flex flex-wrap gap-2 mb-4">
+            {BUDGETS.map((b) => (
+              <button
+                key={b.label}
+                onClick={() => updateFilter('maxPrice', b.value)}
+                className={`px-3 py-1 rounded text-sm font-medium border transition-colors ${
+                  maxPrice === b.value
+                    ? 'border-blue-600 text-blue-600 bg-blue-50'
+                    : 'border-gray-200 text-gray-600 hover:border-blue-400 bg-white'
+                }`}
+              >
+                {b.label}
+              </button>
+            ))}
+          </div>
+
           {loading ? (
             <div className="py-16"><Spinner size="lg" /></div>
           ) : products.length === 0 ? (

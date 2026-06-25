@@ -1025,7 +1025,7 @@ const ROLE_STYLES = {
 const ROLE_ORDER = ['guest', 'buyer', 'seller', 'any'];
 
 function CommandCard({ cmd, onEdit, onDelete, onReset, onToggleActive,
-                        onDragStart, onDragOver, onDrop, onDragEnd, isDragTarget }) {
+                       onDragStart, onDragOver, onDrop, onDragEnd, isDragTarget }) {
   const s = ROLE_STYLES[cmd.role] || ROLE_STYLES.any;
   return (
     <div
@@ -1034,63 +1034,66 @@ function CommandCard({ cmd, onEdit, onDelete, onReset, onToggleActive,
       onDragOver={(e) => { e.preventDefault(); onDragOver?.(); }}
       onDrop={(e) => { e.preventDefault(); onDrop?.(); }}
       onDragEnd={onDragEnd}
-      className={`card border overflow-hidden transition-all cursor-grab active:cursor-grabbing ${isDragTarget ? 'border-blue-400 shadow-lg scale-[1.01]' : s.border}`}
+      className={`card border rounded-xl overflow-hidden transition-shadow ${isDragTarget ? 'border-blue-400 shadow-lg ring-2 ring-blue-100' : s.border}`}
     >
-      <div className={`px-4 py-2.5 ${s.header} border-b flex items-center justify-between gap-2`}>
-        <div className="flex items-center gap-1.5 flex-wrap min-w-0">
-          <span className="text-gray-300 hover:text-gray-500 select-none text-base leading-none" title="Drag to reorder">⠿</span>
-          <span className="font-mono text-xs font-bold text-gray-700 truncate">{cmd.key}</span>
-          <span className={`text-xs px-1.5 py-0.5 rounded-full whitespace-nowrap ${s.badge}`}>{ROLE_STYLES[cmd.role]?.label || cmd.role}</span>
-          {cmd.isSystem && <span className="text-xs px-1.5 py-0.5 rounded-full bg-yellow-100 text-yellow-700 whitespace-nowrap">System</span>}
-          <span className={`text-xs px-1.5 py-0.5 rounded-full whitespace-nowrap ${cmd.response.type === 'button' ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-600'}`}>
-            {cmd.response.type === 'button' ? '🔘 Buttons' : '📝 Text'}
-          </span>
+      <div className="flex">
+        {/* Drag handle — full-height strip */}
+        <div className="flex-shrink-0 w-7 flex items-center justify-center cursor-grab active:cursor-grabbing bg-gray-50 border-r border-gray-100 hover:bg-gray-100 transition-colors group" title="Drag to reorder">
+          <span className="select-none text-gray-300 group-hover:text-gray-500 text-base leading-none">⋮⋮</span>
         </div>
-        <div className="flex items-center gap-0.5 flex-shrink-0">
-          <button onClick={() => onToggleActive(cmd)} title={cmd.isActive ? 'Active – click to deactivate' : 'Inactive – click to activate'}
-            className={`p-1.5 rounded-lg ${cmd.isActive ? 'text-green-600 hover:bg-green-100' : 'text-gray-400 hover:bg-gray-100'}`}>
-            {cmd.isActive ? <FiCheckCircle size={14} /> : <FiXCircle size={14} />}
-          </button>
-          <button onClick={() => onEdit(cmd)} title="Edit" className="p-1.5 rounded-lg text-gray-500 hover:bg-white hover:text-gray-700">
-            <FiEdit2 size={14} />
-          </button>
-          {cmd.isSystem ? (
-            <button onClick={() => onReset(cmd)} title="Reset to default" className="p-1.5 rounded-lg text-amber-500 hover:bg-amber-50">
-              <FiRefreshCw size={14} />
-            </button>
-          ) : (
-            <button onClick={() => onDelete(cmd)} title="Delete" className="p-1.5 rounded-lg text-red-400 hover:bg-red-50">
-              <FiTrash2 size={14} />
-            </button>
+
+        <div className="flex-1 min-w-0 p-3 space-y-2">
+          {/* Label + actions row */}
+          <div className="flex items-start gap-2">
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-gray-800 text-sm leading-snug">{cmd.label}</p>
+              <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${s.badge}`}>{s.label}</span>
+                {cmd.isSystem && <span className="text-xs px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">System</span>}
+                <span className={`text-xs font-medium ${cmd.isActive ? 'text-green-600' : 'text-gray-400'}`}>{cmd.isActive ? '● On' : '○ Off'}</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-0.5 flex-shrink-0">
+              <button onClick={() => onToggleActive(cmd)} title={cmd.isActive ? 'Turn off' : 'Turn on'}
+                className={`p-1.5 rounded-lg transition-colors ${cmd.isActive ? 'text-green-600 hover:bg-green-50' : 'text-gray-400 hover:bg-gray-100'}`}>
+                {cmd.isActive ? <FiCheckCircle size={14} /> : <FiXCircle size={14} />}
+              </button>
+              <button onClick={() => onEdit(cmd)} title="Edit message"
+                className="p-1.5 rounded-lg text-blue-500 hover:bg-blue-50 transition-colors">
+                <FiEdit2 size={14} />
+              </button>
+              {cmd.isSystem ? (
+                <button onClick={() => onReset(cmd)} title="Restore factory defaults"
+                  className="p-1.5 rounded-lg text-amber-500 hover:bg-amber-50 transition-colors">
+                  <FiRefreshCw size={14} />
+                </button>
+              ) : (
+                <button onClick={() => onDelete(cmd)} title="Delete"
+                  className="p-1.5 rounded-lg text-red-400 hover:bg-red-50 transition-colors">
+                  <FiTrash2 size={14} />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Message preview */}
+          {cmd.response.text && (
+            <div className="text-xs text-gray-600 bg-gray-50 rounded-lg px-2.5 py-2 leading-relaxed line-clamp-2">
+              {cmd.response.text.replace(/\*/g, '').slice(0, 120)}{cmd.response.text.length > 120 ? '\u2026' : ''}
+            </div>
+          )}
+
+          {/* Button pills */}
+          {cmd.response.type === 'button' && cmd.response.buttons?.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {cmd.response.buttons.map((btn, i) => (
+                <span key={i} className="text-xs bg-white border border-gray-300 text-gray-700 px-2.5 py-0.5 rounded-full shadow-sm">
+                  {btn.title}
+                </span>
+              ))}
+            </div>
           )}
         </div>
-      </div>
-      <div className="p-3 space-y-2">
-        <div>
-          <p className="font-medium text-gray-800 text-sm">{cmd.label}</p>
-          {cmd.description && <p className="text-xs text-gray-400 mt-0.5">{cmd.description}</p>}
-        </div>
-        {cmd.triggers?.length > 0 && (
-          <div className="flex flex-wrap gap-1">
-            {cmd.triggers.map((t, i) => (
-              <span key={i} className="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded font-mono">{t}</span>
-            ))}
-          </div>
-        )}
-        {cmd.response.text && (
-          <p className="text-xs text-gray-600 bg-gray-50 rounded p-2 font-mono whitespace-pre-wrap line-clamp-3">
-            {cmd.response.text.slice(0, 150)}{cmd.response.text.length > 150 ? '…' : ''}
-          </p>
-        )}
-        {cmd.response.type === 'button' && cmd.response.buttons?.length > 0 && (
-          <div className="flex flex-wrap gap-1">
-            {cmd.response.buttons.map((btn, i) => (
-              <span key={i} className="text-xs bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded-lg font-medium">
-                {btn.title}
-              </span>
-            ))}
-          </div>
-        )}
       </div>
     </div>
   );
@@ -1100,27 +1103,40 @@ function CommandModal({ command, onSave, onClose, saving }) {
   const isNew = !command?._id;
   const [form, setForm] = useState(() => command ? {
     ...command,
-    response: { ...command.response, buttons: command.response.buttons || [] },
+    response: { ...command.response, buttons: (command.response.buttons || []).map(b => ({ ...b })) },
   } : {
     key: '', label: '', description: '', role: 'guest',
     triggers: [],
-    response: { type: 'button', text: '', buttons: [{ id: '', title: '' }] },
+    response: { type: 'text', text: '', buttons: [] },
     isActive: true,
   });
   const [triggersInput, setTriggersInput] = useState((command?.triggers || []).join(', '));
-  const [tab, setTab] = useState('basic');
 
   const set = (f, v) => setForm(prev => ({ ...prev, [f]: v }));
   const setResp = (f, v) => setForm(prev => ({ ...prev, response: { ...prev.response, [f]: v } }));
+
+  const switchType = (type) => {
+    setForm(prev => ({
+      ...prev,
+      response: {
+        ...prev.response,
+        type,
+        buttons: type === 'button' && prev.response.buttons.length === 0 ? [{ id: '', title: '' }] : prev.response.buttons,
+      },
+    }));
+  };
 
   const addBtn = () => {
     if (form.response.buttons.length >= 3) return;
     setResp('buttons', [...form.response.buttons, { id: '', title: '' }]);
   };
   const removeBtn = (i) => setResp('buttons', form.response.buttons.filter((_, idx) => idx !== i));
-  const updateBtn = (i, field, value) => {
+  const updateBtnTitle = (i, title) => {
     const btns = [...form.response.buttons];
-    btns[i] = { ...btns[i], [field]: value };
+    btns[i] = {
+      id: btns[i].id || title.toUpperCase().replace(/[^A-Z0-9]/g, '_').slice(0, 20),
+      title,
+    };
     setResp('buttons', btns);
   };
 
@@ -1134,117 +1150,127 @@ function CommandModal({ command, onSave, onClose, saving }) {
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-        <div className="px-6 py-4 border-b flex items-center justify-between sticky top-0 bg-white">
-          <h3 className="font-semibold text-gray-800 text-sm">{isNew ? 'Add New Bot Command' : `Edit: ${command.label}`}</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-lg leading-none">✕</button>
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div className="px-5 py-4 border-b flex items-center justify-between sticky top-0 bg-white z-10">
+          <div>
+            <h3 className="font-semibold text-gray-800">{isNew ? 'New Bot Command' : 'Edit Bot Command'}</h3>
+            {!isNew && <p className="text-xs text-gray-400 mt-0.5 font-mono">{command.key}</p>}
+          </div>
+          <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 text-lg">×</button>
         </div>
 
-        <div className="flex border-b px-4">
-          {['basic', 'response'].map(t => (
-            <button key={t} onClick={() => setTab(t)}
-              className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px capitalize ${tab === t ? 'border-green-500 text-green-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
-              {t === 'basic' ? 'Basic Info' : 'Response'}
-            </button>
-          ))}
-        </div>
+        <form onSubmit={handleSubmit} className="p-5 space-y-5">
+          {/* Command name */}
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-1">Command name <span className="font-normal text-gray-400">(admin label only)</span></label>
+            <input className="input-field" placeholder="e.g. Buyer Welcome Message"
+              value={form.label} onChange={e => set('label', e.target.value)} required />
+          </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          {tab === 'basic' && <>
-            {isNew && (
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Key <span className="text-gray-400 font-normal">(unique identifier, no spaces)</span></label>
-                <input className="input-field text-sm font-mono" placeholder="e.g. promo_reply" value={form.key}
-                  onChange={e => set('key', e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_'))} required />
-              </div>
-            )}
+          {/* Who + Active */}
+          <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Label</label>
-              <input className="input-field text-sm" value={form.label} onChange={e => set('label', e.target.value)} required />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Description <span className="text-gray-400 font-normal">(optional)</span></label>
-              <input className="input-field text-sm" value={form.description} onChange={e => set('description', e.target.value)} />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">User Role</label>
+              <label className="block text-sm font-semibold text-gray-700 mb-1">Who sees this?</label>
               <select className="input-field text-sm" value={form.role} onChange={e => set('role', e.target.value)}>
-                <option value="guest">Guest (unregistered)</option>
-                <option value="buyer">Buyer</option>
-                <option value="seller">Seller</option>
-                <option value="any">Any</option>
+                <option value="guest">👤 Guests (new users)</option>
+                <option value="buyer">🛒 Buyers</option>
+                <option value="seller">🏠 Sellers</option>
+                <option value="any">🌐 Everyone</option>
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Trigger Keywords <span className="text-gray-400 font-normal">(comma-separated, documentation only)</span></label>
-              <input className="input-field text-sm font-mono" placeholder="hi, hello, hey, start"
-                value={triggersInput} onChange={e => setTriggersInput(e.target.value)} />
-            </div>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" checked={form.isActive} onChange={e => set('isActive', e.target.checked)} className="rounded" />
-              <span className="text-sm text-gray-700">Active</span>
-            </label>
-          </>}
-
-          {tab === 'response' && <>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-2">Response Type</label>
-              <div className="flex gap-2">
-                <button type="button" onClick={() => setResp('type', 'text')}
-                  className={`flex-1 py-2 text-sm rounded-lg border font-medium transition-colors ${form.response.type === 'text' ? 'bg-gray-800 text-white border-gray-800' : 'border-gray-300 text-gray-600 hover:border-gray-400'}`}>
-                  📝 Plain Text
-                </button>
-                <button type="button" onClick={() => setResp('type', 'button')}
-                  className={`flex-1 py-2 text-sm rounded-lg border font-medium transition-colors ${form.response.type === 'button' ? 'bg-indigo-600 text-white border-indigo-600' : 'border-gray-300 text-gray-600 hover:border-gray-400'}`}>
-                  🔘 Buttons
-                </button>
-              </div>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">
-                Message Body
-                <span className="text-gray-400 font-normal ml-1">— use *text* for bold, {"{name}"} for user's name</span>
+              <label className="block text-sm font-semibold text-gray-700 mb-1">Status</label>
+              <label className="flex items-center gap-2 cursor-pointer p-2.5 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors">
+                <input type="checkbox" checked={form.isActive} onChange={e => set('isActive', e.target.checked)} className="rounded" />
+                <div>
+                  <p className="text-sm text-gray-700">{form.isActive ? 'Active' : 'Inactive'}</p>
+                  <p className="text-xs text-gray-400">{form.isActive ? 'Bot will use this' : 'Bot ignores this'}</p>
+                </div>
               </label>
-              <textarea className="input-field text-sm font-mono resize-y" rows={5}
-                value={form.response.text} onChange={e => setResp('text', e.target.value)}
-                placeholder="Enter the WhatsApp message..." required />
             </div>
+          </div>
+
+          {/* Response section */}
+          <div className="space-y-3 border-t pt-4">
+            <div>
+              <p className="text-sm font-semibold text-gray-700">What should the bot reply?</p>
+              <p className="text-xs text-gray-400 mt-0.5">This is the exact message users receive on WhatsApp.</p>
+            </div>
+
+            {/* Type toggle */}
+            <div className="flex gap-2">
+              <button type="button" onClick={() => switchType('text')}
+                className={`flex-1 py-2.5 text-sm rounded-lg border font-medium transition-all ${form.response.type === 'text' ? 'bg-gray-800 text-white border-gray-800' : 'border-gray-200 text-gray-600 hover:border-gray-400'}`}>
+                💬 Text only
+              </button>
+              <button type="button" onClick={() => switchType('button')}
+                className={`flex-1 py-2.5 text-sm rounded-lg border font-medium transition-all ${form.response.type === 'button' ? 'bg-green-600 text-white border-green-600' : 'border-gray-200 text-gray-600 hover:border-gray-400'}`}>
+                🔘 Text + tap buttons
+              </button>
+            </div>
+
+            {/* Message text */}
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-sm font-medium text-gray-700">Message</label>
+                <span className="text-xs text-gray-400">*bold*  ·  {"{name}"} = user's name</span>
+              </div>
+              <textarea className="input-field font-mono text-sm resize-y" rows={5}
+                value={form.response.text} onChange={e => setResp('text', e.target.value)}
+                placeholder="Type what the bot will send..." required />
+            </div>
+
+            {/* Buttons */}
             {form.response.type === 'button' && (
               <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="text-xs font-medium text-gray-700">Buttons <span className="text-gray-400 font-normal">(max 3)</span></label>
-                  {form.response.buttons.length < 3 && (
-                    <button type="button" onClick={addBtn} className="text-xs text-indigo-600 hover:text-indigo-800 flex items-center gap-1">
-                      <FiPlus size={12} /> Add
-                    </button>
-                  )}
-                </div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Tap buttons <span className="text-gray-400 font-normal text-xs">— max 3, shown under the message</span>
+                </label>
                 <div className="space-y-2">
                   {form.response.buttons.map((btn, i) => (
                     <div key={i} className="flex gap-2 items-center">
-                      <input className="input-field text-xs font-mono flex-1" placeholder="ID (e.g. ACTION_1)"
-                        value={btn.id} onChange={e => updateBtn(i, 'id', e.target.value.toUpperCase().replace(/\s+/g, '_'))} required />
-                      <input className="input-field text-xs flex-1" placeholder="Label (max 20 chars)"
-                        value={btn.title} maxLength={20} onChange={e => updateBtn(i, 'title', e.target.value)} required />
-                      <button type="button" onClick={() => removeBtn(i)} className="p-1.5 text-red-400 hover:text-red-600 flex-shrink-0">
+                      <span className="text-xs text-gray-400 w-4 text-center">{i + 1}.</span>
+                      <input className="input-field text-sm flex-1" placeholder="Button label (e.g. View Orders)"
+                        value={btn.title} maxLength={20}
+                        onChange={e => updateBtnTitle(i, e.target.value)} required />
+                      <button type="button" onClick={() => removeBtn(i)} className="p-1.5 text-red-400 hover:text-red-600">
                         <FiTrash2 size={14} />
                       </button>
                     </div>
                   ))}
-                  {form.response.buttons.length === 0 && (
+                  {form.response.buttons.length < 3 && (
                     <button type="button" onClick={addBtn}
-                      className="w-full py-3 border-2 border-dashed border-gray-300 rounded-lg text-sm text-gray-400 hover:border-indigo-300 hover:text-indigo-500">
-                      + Add first button
+                      className="w-full py-2.5 border-2 border-dashed border-gray-200 rounded-lg text-sm text-gray-400 hover:border-green-300 hover:text-green-500 transition-colors">
+                      + Add button
                     </button>
                   )}
                 </div>
               </div>
             )}
-          </>}
+          </div>
 
-          <div className="flex gap-2 pt-2 border-t">
-            <button type="button" onClick={onClose} className="btn-secondary flex-1 text-sm">Cancel</button>
-            <button type="submit" disabled={saving} className="btn-primary flex-1 text-sm">
+          {/* Advanced — only for new commands */}
+          {isNew && (
+            <details className="border border-gray-200 rounded-lg">
+              <summary className="px-4 py-3 text-sm font-medium text-gray-500 cursor-pointer select-none">Advanced settings</summary>
+              <div className="px-4 pb-4 pt-3 border-t space-y-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Command key <span className="font-normal text-gray-400">(unique ID, no spaces)</span></label>
+                  <input className="input-field text-sm font-mono" placeholder="e.g. promo_reply"
+                    value={form.key} onChange={e => set('key', e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_'))} required />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Trigger keywords <span className="font-normal text-gray-400">(comma-separated, for reference)</span></label>
+                  <input className="input-field text-sm font-mono" placeholder="hi, hello, start"
+                    value={triggersInput} onChange={e => setTriggersInput(e.target.value)} />
+                </div>
+              </div>
+            </details>
+          )}
+
+          <div className="flex gap-2 pt-1">
+            <button type="button" onClick={onClose} className="btn-secondary flex-1">Cancel</button>
+            <button type="submit" disabled={saving} className="btn-primary flex-1">
               {saving ? 'Saving…' : (isNew ? 'Create Command' : 'Save Changes')}
             </button>
           </div>
@@ -1253,6 +1279,13 @@ function CommandModal({ command, onSave, onClose, saving }) {
     </div>
   );
 }
+
+const ROLE_DESCRIPTIONS = {
+  guest:  "New visitors who haven't registered yet",
+  buyer:  "Registered users buying products",
+  seller: "Vendors managing their listings",
+  any:    "Sent to all users regardless of role",
+};
 
 function BotFlowPanel() {
   const [commands, setCommands] = useState([]);
@@ -1282,18 +1315,9 @@ function BotFlowPanel() {
     return acc;
   }, {});
 
-  const handleDragStart = (role, idx) => {
-    dragInfo.current = { role, idx };
-  };
-
-  const handleDragOver = (role, idx) => {
-    if (dragInfo.current?.role === role) setDragState({ role, toIdx: idx });
-  };
-
-  const handleDragEnd = () => {
-    setDragState({ role: null, toIdx: null });
-    dragInfo.current = null;
-  };
+  const handleDragStart = (role, idx) => { dragInfo.current = { role, idx }; };
+  const handleDragOver = (role, idx) => { if (dragInfo.current?.role === role) setDragState({ role, toIdx: idx }); };
+  const handleDragEnd = () => { setDragState({ role: null, toIdx: null }); dragInfo.current = null; };
 
   const handleDrop = async (role, toIdx) => {
     const from = dragInfo.current;
@@ -1318,7 +1342,7 @@ function BotFlowPanel() {
         toast.success('Command created');
       } else {
         await waAdminAPI.updateBotCommand(data._id, data);
-        toast.success('Command updated');
+        toast.success('Saved');
       }
       setEditModal(null);
       setCreateModal(false);
@@ -1331,10 +1355,10 @@ function BotFlowPanel() {
   };
 
   const handleDelete = async (cmd) => {
-    if (!window.confirm(`Delete "${cmd.label}"? This cannot be undone.`)) return;
+    if (!window.confirm(`Delete "${cmd.label}"?`)) return;
     try {
       await waAdminAPI.deleteBotCommand(cmd._id);
-      toast.success('Command deleted');
+      toast.success('Deleted');
       load();
     } catch (e) {
       toast.error(e.response?.data?.message || 'Delete failed');
@@ -1342,7 +1366,7 @@ function BotFlowPanel() {
   };
 
   const handleReset = async (cmd) => {
-    if (!window.confirm(`Reset "${cmd.label}" to factory defaults?`)) return;
+    if (!window.confirm(`Reset "${cmd.label}" back to factory defaults?`)) return;
     try {
       await waAdminAPI.resetBotCommand(cmd._id);
       toast.success('Reset to default');
@@ -1356,43 +1380,46 @@ function BotFlowPanel() {
     try {
       await waAdminAPI.updateBotCommand(cmd._id, { isActive: !cmd.isActive });
       setCommands(cs => cs.map(c => c._id === cmd._id ? { ...c, isActive: !c.isActive } : c));
-    } catch {
-      toast.error('Toggle failed');
-    }
+    } catch { toast.error('Toggle failed'); }
   };
 
   if (loading) return <div className="flex justify-center py-20"><Spinner /></div>;
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      {/* Header */}
+      <div className="flex items-start justify-between gap-4">
         <div>
           <h2 className="text-lg font-semibold text-gray-800">Bot Flow Builder</h2>
-          <p className="text-xs text-gray-500 mt-0.5">Drag to reorder commands · Edit responses · Changes apply immediately</p>
+          <p className="text-sm text-gray-500 mt-0.5">Edit what the WhatsApp bot says. Drag cards to reorder.</p>
         </div>
-        <button onClick={() => setCreateModal(true)} className="btn-primary flex items-center gap-1.5 text-sm">
+        <button onClick={() => setCreateModal(true)} className="btn-primary flex items-center gap-1.5 text-sm flex-shrink-0">
           <FiPlus size={14} /> Add Command
         </button>
       </div>
 
-      <div className="card p-4 flex items-start gap-3 bg-amber-50 border-amber-200">
-        <FiAlertCircle size={15} className="text-amber-500 mt-0.5 flex-shrink-0" />
-        <div className="text-xs text-amber-800 space-y-1">
-          <p className="font-medium">How bot commands work</p>
-          <p>Edit message text and buttons here — the bot uses these responses in real time. System commands (yellow badge) can't be deleted but can be reset to defaults. Use <code className="bg-amber-100 px-1 rounded font-mono">{"{name}"}</code> in message text for the user's name. <strong>Drag cards by the ⠿ handle to reorder</strong> — order is saved automatically.</p>
-        </div>
+      {/* Quick guide */}
+      <div className="card p-4 bg-blue-50 border-blue-200 text-xs text-blue-800 space-y-1">
+        <p className="font-semibold text-blue-900 mb-1.5">How to use this</p>
+        <p>• <strong>✏️ Edit</strong> — change the message and buttons the bot sends to users</p>
+        <p>• <strong>✓ / ✗ On/Off</strong> — enable or disable a command without deleting it</p>
+        <p>• <strong>↺ Reset</strong> — restore a system command to its original wording</p>
+        <p>• <strong>⋮⋮ Drag</strong> — grab the left strip of a card to reorder within a group</p>
       </div>
 
+      {/* Role sections */}
       {ROLE_ORDER.map(role => {
         const cmds = grouped[role];
         if (!cmds?.length) return null;
+        const s = ROLE_STYLES[role];
         return (
           <div key={role}>
-            <h3 className="text-sm font-semibold text-gray-600 mb-3 flex items-center gap-2">
-              {ROLE_STYLES[role]?.label}
-              <span className="text-xs font-normal text-gray-400">{cmds.length} command{cmds.length !== 1 ? 's' : ''}</span>
-            </h3>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className={`inline-flex flex-wrap items-center gap-2 px-3 py-1.5 rounded-full ${s.bg} border ${s.border} mb-3`}>
+              <span className="text-sm font-semibold text-gray-700">{s.label}</span>
+              <span className="text-xs text-gray-500">— {ROLE_DESCRIPTIONS[role]}</span>
+              <span className="text-xs text-gray-400 ml-1">({cmds.length})</span>
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
               {cmds.map((cmd, idx) => (
                 <CommandCard key={cmd._id} cmd={cmd}
                   onEdit={setEditModal} onDelete={handleDelete}
@@ -1420,6 +1447,7 @@ function BotFlowPanel() {
     </div>
   );
 }
+
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 

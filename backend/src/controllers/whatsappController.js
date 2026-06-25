@@ -653,36 +653,31 @@ const handleUnknownUser = async (phone, text, interactiveId, session, profileNam
 
       session.state = 'idle'; session.context = {}; await session.save();
 
-      const confirmText =
+      const CLIENT = process.env.CLIENT_URL || 'https://shop.instify.in';
+
+      // Message 1: confirmation + optional tracking URL + Help/Menu buttons (single message)
+      let confirmBody =
         `✅ *Inquiry Received, ${buyerName}!*\n\n` +
         `📦 *Product:* ${product}\n` +
         `📊 *Quantity:* ${qty}\n\n` +
         (sellers.length > 0
-          ? `We found *${sellers.length}* seller(s) — they'll contact you shortly on WhatsApp.`
+          ? `*${sellers.length}* seller(s) will contact you shortly on WhatsApp.`
           : `Sellers will contact you shortly on WhatsApp.`);
 
-      // Send CTA URL button so buyer can track inquiry in dashboard
       if (session.userId) {
         const trackerUser = await User.findById(session.userId);
         if (trackerUser) {
           const trackLink = await generateMagicLink(trackerUser, '/dashboard/inquiries');
-          await wa.sendCtaUrlMessage(phone, confirmText, 'Track Inquiry', trackLink, session.userId);
-        } else {
-          await wa.sendTextMessage(phone, confirmText);
+          confirmBody += `\n\n🔗 Track: ${trackLink}`;
         }
-      } else {
-        await wa.sendTextMessage(phone, confirmText);
       }
 
-      // Quick-reply buttons: Help + Menu
-      await wa.sendButtonMessage(phone,
-        `Need anything else?`,
+      await wa.sendButtonMessage(phone, confirmBody,
         [{ id: 'HELP', title: 'Help' }, { id: 'MENU', title: 'Main Menu' }],
         session.userId || null
-      ).catch(() => {});
+      );
 
-      // Send seller contacts to buyer — one Chat + one Call button per seller
-      const CLIENT = process.env.CLIENT_URL || 'https://shop.instify.in';
+      // Per seller: 1 message — call link in body + Chat button
       if (sellers.length > 0) {
         for (const s of sellers) {
           const sellerClean = s.phone.replace(/\D/g, '');
@@ -690,36 +685,22 @@ const handleUnknownUser = async (phone, text, interactiveId, session, profileNam
           const displayName = s.businessName || s.name;
           await wa.sendCtaUrlMessage(
             phone,
-            `🏪 *${displayName}*\n📞 +${sellerWaNum}`,
+            `🏪 *${displayName}*\n📞 +${sellerWaNum}\n📲 Call: ${CLIENT}/call?phone=${sellerWaNum}`,
             'Chat on WhatsApp',
             `https://wa.me/${sellerWaNum}`,
             session.userId || null
           ).catch(() => {});
-          await wa.sendCtaUrlMessage(
-            phone,
-            `📞 Call *${displayName}*`,
-            'Call Now',
-            `${CLIENT}/call?phone=${sellerWaNum}`,
-            session.userId || null
-          ).catch(() => {});
         }
 
-        // Notify each seller — buyer contact with Chat + Call buttons
+        // Notify sellers: 1 message each — buyer call link in body + Chat button
         const guestClean = phone.replace(/\D/g, '');
         const buyerWaNum = guestClean.startsWith('91') ? guestClean : `91${guestClean}`;
         for (const s of sellers) {
           await wa.sendCtaUrlMessage(
             s.phone,
-            `🔔 *New Inquiry – PrintMart*\n\n📦 *Product:* ${product}\n📊 *Quantity:* ${qty}\n👤 *Buyer:* ${buyerName}\n📞 +${buyerWaNum}`,
+            `🔔 *New Inquiry – PrintMart*\n\n📦 *Product:* ${product}\n📊 *Quantity:* ${qty}\n👤 *Buyer:* ${buyerName}\n📞 +${buyerWaNum}\n📲 Call: ${CLIENT}/call?phone=${buyerWaNum}`,
             'Chat with Buyer',
             `https://wa.me/${buyerWaNum}`,
-            s._id
-          ).catch(() => {});
-          await wa.sendCtaUrlMessage(
-            s.phone,
-            `📞 Call *${buyerName}*`,
-            'Call Now',
-            `${CLIENT}/call?phone=${buyerWaNum}`,
             s._id
           ).catch(() => {});
         }
@@ -795,49 +776,38 @@ const handleUnknownUser = async (phone, text, interactiveId, session, profileNam
         }
       }
 
+      const CLIENT = process.env.CLIENT_URL || 'https://shop.instify.in';
       session.state = 'idle'; session.context = {}; await session.save();
+
+      // Message 1: confirmation + Register button (single message)
       await wa.sendButtonMessage(phone,
-        `✅ *Thank you, ${guestName}!*\n\nYour requirement for *${product}* (Qty: ${qty}) has been received.\n\nOur sellers will contact you on WhatsApp shortly.\n\nRegister free to track all your inquiries and orders:`,
+        `✅ *Thank you, ${guestName}!*\n\nYour requirement for *${product}* (Qty: ${qty}) has been received.\n\n${sellers.length > 0 ? `*${sellers.length}* seller(s) will contact you shortly.` : 'Sellers will contact you shortly.'}\n\nRegister free to track all your inquiries:`,
         [{ id: 'REGISTER', title: 'Register Free' }]
       );
 
       if (sellers.length > 0) {
-        // Send seller contacts to guest — Chat + Call buttons per seller
-        const CLIENT = process.env.CLIENT_URL || 'https://shop.instify.in';
+        // Per seller: 1 message — call link in body + Chat button
         for (const s of sellers) {
           const sellerClean = s.phone.replace(/\D/g, '');
           const sellerWaNum = sellerClean.startsWith('91') ? sellerClean : `91${sellerClean}`;
           const displayName = s.businessName || s.name;
           await wa.sendCtaUrlMessage(
             phone,
-            `🏪 *${displayName}*\n📞 +${sellerWaNum}`,
+            `🏪 *${displayName}*\n📞 +${sellerWaNum}\n📲 Call: ${CLIENT}/call?phone=${sellerWaNum}`,
             'Chat on WhatsApp',
             `https://wa.me/${sellerWaNum}`
           ).catch(() => {});
-          await wa.sendCtaUrlMessage(
-            phone,
-            `📞 Call *${displayName}*`,
-            'Call Now',
-            `${CLIENT}/call?phone=${sellerWaNum}`
-          ).catch(() => {});
         }
 
-        // Notify each seller — buyer contact with Chat + Call buttons
+        // Notify sellers: 1 message each — buyer call link in body + Chat button
         const guestClean = phone.replace(/\D/g, '');
         const buyerWaNum = guestClean.startsWith('91') ? guestClean : `91${guestClean}`;
         for (const s of sellers) {
           await wa.sendCtaUrlMessage(
             s.phone,
-            `🔔 *New Guest Inquiry – PrintMart*\n\n📦 *Product:* ${product}\n📊 *Quantity:* ${qty}\n👤 *Buyer:* ${guestName}\n📞 +${buyerWaNum}`,
+            `🔔 *New Inquiry – PrintMart*\n\n📦 *Product:* ${product}\n📊 *Quantity:* ${qty}\n👤 *Buyer:* ${guestName}\n📞 +${buyerWaNum}\n📲 Call: ${CLIENT}/call?phone=${buyerWaNum}`,
             'Chat with Buyer',
             `https://wa.me/${buyerWaNum}`,
-            s._id
-          ).catch(() => {});
-          await wa.sendCtaUrlMessage(
-            s.phone,
-            `📞 Call *${guestName}*`,
-            'Call Now',
-            `${CLIENT}/call?phone=${buyerWaNum}`,
             s._id
           ).catch(() => {});
         }

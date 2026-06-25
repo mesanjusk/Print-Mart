@@ -62,10 +62,12 @@ export default function AdminUsers() {
   };
 
   const visible = users.filter((u) => {
+    const q = search.toLowerCase();
     const matchSearch = !search ||
-      u.name?.toLowerCase().includes(search.toLowerCase()) ||
-      u.email?.toLowerCase().includes(search.toLowerCase()) ||
-      u.businessName?.toLowerCase().includes(search.toLowerCase());
+      u.name?.toLowerCase().includes(q) ||
+      u.email?.toLowerCase().includes(q) ||
+      u.businessName?.toLowerCase().includes(q) ||
+      u.phone?.toLowerCase().includes(q);
     const matchFilter = filter === 'all' || u.role === filter || (filter === 'premium' && u.plan === 'premium');
     return matchSearch && matchFilter;
   });
@@ -102,7 +104,7 @@ export default function AdminUsers() {
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search name / email / business..."
+            placeholder="Search name / email / phone / business..."
             className="input pl-9 text-sm"
           />
         </div>
@@ -139,6 +141,7 @@ export default function AdminUsers() {
                     <td className="px-4 py-3">
                       <p className="font-medium text-gray-800">{u.name} {isSelf && <span className="text-xs text-gray-400">(you)</span>}</p>
                       <p className="text-xs text-gray-400">{u.email}</p>
+                      {u.phone && <p className="text-xs text-blue-500">{u.phone}</p>}
                       {u.businessName && <p className="text-xs text-green-600">{u.businessName}</p>}
                     </td>
                     <td className="px-4 py-3">

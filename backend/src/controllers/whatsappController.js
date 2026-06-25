@@ -801,14 +801,32 @@ const handleUnknownUser = async (phone, text, interactiveId, session, profileNam
     const { name, role } = ctx;
     const withPlus = `+${phone}`;
 
-    // Phone duplicate check
+    // Phone duplicate check — auto-registered accounts get updated with explicit registration data
     const last10 = phone.replace(/\D/g, '').slice(-10);
     const phoneExists = await User.findOne({ phone: { $regex: last10 } });
     if (phoneExists) {
-      session.state = 'idle'; session.context = {}; await session.save();
+      phoneExists.name = name;
+      if (email) phoneExists.email = email;
+      phoneExists.role = role || 'buyer';
+      phoneExists.isVerified = true;
+      await phoneExists.save();
+
+      session.userId = phoneExists._id;
+      session.role = phoneExists.role;
+      session.state = 'idle';
+      session.context = {};
+      session.markModified('context');
+      await session.save();
+
       const magicLink = await generateMagicLink(phoneExists);
       return wa.sendTextMessage(phone,
-        `👋 You already have an account, *${phoneExists.name}*!\n\n🔗 Click to login & change password:\n${magicLink}\n\n⚠️ Link expires in 30 minutes.\nReply *RESET* to get a new link anytime.`
+        `✅ *Registration Complete!*\n\n` +
+        `👤 Name: ${name}\n` +
+        (email ? `📧 Email: ${email}\n` : '') +
+        `📱 Phone: +${phone}\n` +
+        `👤 Role: ${phoneExists.role}\n\n` +
+        `🔗 *Click to login & set your password:*\n${magicLink}\n\n` +
+        `⚠️ Link expires in 30 minutes.\nReply *MENU* to continue.`
       );
     }
 

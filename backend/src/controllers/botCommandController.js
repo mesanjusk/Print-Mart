@@ -79,7 +79,7 @@ const DEFAULT_COMMANDS = [
       type: 'button',
       text: `👋 Welcome back, *{name}*!\n\nWhat would you like to do?`,
       buttons: [
-        { id: 'STATUS', title: 'My Inquiries' },
+        { id: 'GET_QUOTE', title: 'Get a Quote' },
         { id: 'ORDERS', title: 'My Orders' },
         { id: 'HELP', title: 'Help' },
       ],

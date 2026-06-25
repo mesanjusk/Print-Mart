@@ -148,28 +148,64 @@ const handleBuyerMessage = async (phone, user, text, interactiveId, session) => 
   }
 
   if (cmd.cmd === 'STATUS') {
-    const inquiries = await Inquiry.find({ buyer: user._id, status: { $in: ['pending', 'responded'] } })
-      .populate('product', 'name').populate('seller', 'businessName name').sort({ createdAt: -1 }).limit(5);
-    const orders = await Order.find({ buyer: user._id, status: { $in: ['pending_payment', 'paid', 'processing', 'dispatched'] } })
-      .sort({ createdAt: -1 }).limit(5);
+    const total = await Inquiry.countDocuments({ buyer: user._id, status: { $in: ['pending', 'responded'] } });
+    const activeOrders = await Order.countDocuments({ buyer: user._id, status: { $in: ['pending_payment', 'paid', 'processing', 'dispatched'] } });
 
-    let body = `📊 *Your Status – PrintMart*\n\n`;
-    if (inquiries.length) {
-      body += `*Open Inquiries (${inquiries.length}):*\n`;
-      inquiries.forEach((inq, i) => {
-        body += `${i + 1}. ${inq.product?.name || 'Product'} → ${inq.seller?.businessName || inq.seller?.name || 'Vendor'} [${inq.status}]\n`;
-      });
-      body += '\n';
-    } else body += `No open inquiries.\n\n`;
+    if (total === 0) {
+      let noBody = `📊 *Your Status – PrintMart*\n\nNo open inquiries.`;
+      if (activeOrders > 0) noBody += `\n\nYou have *${activeOrders}* active order(s). Tap below to view.`;
+      return wa.sendButtonMessage(phone, noBody,
+        [{ id: 'GET_QUOTE', title: 'Get a Quote' }, { id: 'ORDERS', title: 'My Orders' }, { id: 'MENU', title: 'Main Menu' }],
+        user._id
+      );
+    }
 
-    if (orders.length) {
-      body += `*Active Orders (${orders.length}):*\n`;
-      orders.forEach((o, i) => {
-        body += `${i + 1}. ${o.orderNumber} – ₹${o.total.toFixed(2)} [${o.status.replace('_', ' ')}]\n`;
-      });
-    } else body += `No active orders.`;
+    session.context = { ...session.context, inqBuyerOffset: 0 };
+    session.markModified('context');
+    await session.save();
 
-    return wa.sendTextMessage(phone, body, user._id);
+    const inqs = await Inquiry.find({ buyer: user._id, status: { $in: ['pending', 'responded'] } })
+      .populate('product', 'name').populate('seller', 'businessName name').sort({ createdAt: -1 }).skip(0).limit(3);
+
+    let body = `📊 *Your Inquiries – PrintMart*\n\nYou have *${total}* open inquiry(s)`;
+    if (activeOrders > 0) body += ` & *${activeOrders}* active order(s)`;
+    body += `:\n\n`;
+    inqs.forEach((inq, i) => {
+      const prod = inq.product?.name || inq.productName || 'Product';
+      const seller = inq.seller?.businessName || inq.seller?.name || 'Vendor';
+      const date = new Date(inq.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+      body += `${i + 1}. *${prod}*\n   🏪 ${seller} | Qty: ${inq.quantity || 1} | ${inq.status}\n   📅 ${date}\n\n`;
+    });
+
+    const btns = total > 3
+      ? [{ id: 'MORE_INQ_BUYER', title: `More (${total - 3} left)` }, { id: 'GET_QUOTE', title: 'Get a Quote' }, { id: 'ORDERS', title: 'My Orders' }]
+      : [{ id: 'GET_QUOTE', title: 'Get a Quote' }, { id: 'ORDERS', title: 'My Orders' }, { id: 'MENU', title: 'Main Menu' }];
+    return wa.sendButtonMessage(phone, body, btns, user._id);
+  }
+
+  if (cmd.cmd === 'MORE_INQ_BUYER') {
+    const offset = (session.context?.inqBuyerOffset || 0) + 3;
+    const total = await Inquiry.countDocuments({ buyer: user._id, status: { $in: ['pending', 'responded'] } });
+    const inqs = await Inquiry.find({ buyer: user._id, status: { $in: ['pending', 'responded'] } })
+      .populate('product', 'name').populate('seller', 'businessName name').sort({ createdAt: -1 }).skip(offset).limit(3);
+
+    session.context = { ...session.context, inqBuyerOffset: offset };
+    session.markModified('context');
+    await session.save();
+
+    let body = `📊 *Your Inquiries – PrintMart* (${offset + 1}–${Math.min(offset + 3, total)} of ${total})\n\n`;
+    inqs.forEach((inq, i) => {
+      const prod = inq.product?.name || inq.productName || 'Product';
+      const seller = inq.seller?.businessName || inq.seller?.name || 'Vendor';
+      const date = new Date(inq.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+      body += `${offset + i + 1}. *${prod}*\n   🏪 ${seller} | Qty: ${inq.quantity || 1} | ${inq.status}\n   📅 ${date}\n\n`;
+    });
+
+    const remaining = total - offset - 3;
+    const btns = remaining > 0
+      ? [{ id: 'MORE_INQ_BUYER', title: `More (${remaining} left)` }, { id: 'GET_QUOTE', title: 'Get a Quote' }, { id: 'ORDERS', title: 'My Orders' }]
+      : [{ id: 'GET_QUOTE', title: 'Get a Quote' }, { id: 'ORDERS', title: 'My Orders' }, { id: 'MENU', title: 'Main Menu' }];
+    return wa.sendButtonMessage(phone, body, btns, user._id);
   }
 
   if (cmd.cmd === 'ORDERS') {

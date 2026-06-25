@@ -358,10 +358,9 @@ const handleSellerMessage = async (phone, user, text, interactiveId) => {
       body += `   🕐 ${dt}\n`;
     });
 
-    const btns = [];
-    if (total > 3) btns.push({ id: 'MORE_INQ', title: `More (${total - 3} left)` });
-    btns.push({ id: 'ORDERS', title: 'My Orders' });
-    if (btns.length < 3) btns.push({ id: 'MENU', title: 'Main Menu' });
+    const btns = total > 3
+      ? [{ id: 'MORE_INQ', title: `More (${total - 3} left)` }, { id: 'GET_QUOTE', title: 'Get a Quote' }, { id: 'ORDERS', title: 'My Orders' }]
+      : [{ id: 'GET_QUOTE', title: 'Get a Quote' }, { id: 'ORDERS', title: 'My Orders' }, { id: 'MENU', title: 'Main Menu' }];
     return wa.sendButtonMessage(phone, body, btns, user._id);
   }
 
@@ -388,10 +387,9 @@ const handleSellerMessage = async (phone, user, text, interactiveId) => {
       body += `   🕐 ${dt}\n`;
     });
 
-    const btns = [];
-    if (offset + 3 < total) btns.push({ id: 'MORE_INQ', title: `More (${total - offset - 3} left)` });
-    btns.push({ id: 'ORDERS', title: 'My Orders' });
-    if (btns.length < 3) btns.push({ id: 'MENU', title: 'Main Menu' });
+    const btns = offset + 3 < total
+      ? [{ id: 'MORE_INQ', title: `More (${total - offset - 3} left)` }, { id: 'GET_QUOTE', title: 'Get a Quote' }, { id: 'ORDERS', title: 'My Orders' }]
+      : [{ id: 'GET_QUOTE', title: 'Get a Quote' }, { id: 'ORDERS', title: 'My Orders' }, { id: 'MENU', title: 'Main Menu' }];
     return wa.sendButtonMessage(phone, body, btns, user._id);
   }
 
@@ -695,8 +693,7 @@ const handleUnknownUser = async (phone, text, interactiveId, session, profileNam
 
       const CLIENT = process.env.CLIENT_URL || 'https://shop.instify.in';
 
-      // Message 1: confirmation + optional tracking URL + Help/Menu buttons (single message)
-      let confirmBody =
+      const confirmBody =
         `✅ *Inquiry Received, ${buyerName}!*\n\n` +
         `📦 *Product:* ${product}\n` +
         `📊 *Quantity:* ${qty}\n\n` +
@@ -704,18 +701,25 @@ const handleUnknownUser = async (phone, text, interactiveId, session, profileNam
           ? `*${sellers.length}* seller(s) will contact you shortly on WhatsApp.`
           : `Sellers will contact you shortly on WhatsApp.`);
 
+      // Track Inquiry as CTA URL button (shown above Help/Menu)
       if (session.userId) {
         const trackerUser = await User.findById(session.userId);
         if (trackerUser) {
           const trackLink = await generateMagicLink(trackerUser, '/dashboard/inquiries');
-          confirmBody += `\n\n🔗 Track: ${trackLink}`;
+          await wa.sendCtaUrlMessage(phone, confirmBody, 'Track Inquiry', trackLink, session.userId);
+        } else {
+          await wa.sendTextMessage(phone, confirmBody, null);
         }
+      } else {
+        await wa.sendTextMessage(phone, confirmBody, null);
       }
 
-      await wa.sendButtonMessage(phone, confirmBody,
+      // Help + Menu quick-reply buttons (separate message, appears below Track button)
+      await wa.sendButtonMessage(phone,
+        `Need anything else?`,
         [{ id: 'HELP', title: 'Help' }, { id: 'MENU', title: 'Main Menu' }],
         session.userId || null
-      );
+      ).catch(() => {});
 
       // Per seller: Chat button + Call button (2 CTA messages, both as buttons)
       if (sellers.length > 0) {

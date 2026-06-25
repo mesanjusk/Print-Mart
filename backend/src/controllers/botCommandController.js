@@ -158,9 +158,15 @@ const DEFAULT_COMMANDS = [
 ];
 
 const ensureSeeded = async () => {
-  const count = await BotCommand.countDocuments();
-  if (count === 0) {
-    await BotCommand.insertMany(DEFAULT_COMMANDS);
+  for (const cmd of DEFAULT_COMMANDS) {
+    const existing = await BotCommand.findOne({ key: cmd.key });
+    if (!existing) {
+      await BotCommand.create(cmd);
+    } else if (existing.isSystem) {
+      // Keep system commands in sync with latest defaults on every deploy
+      Object.assign(existing, cmd);
+      await existing.save();
+    }
   }
 };
 

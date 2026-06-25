@@ -451,13 +451,14 @@ const handleSellerMessage = async (phone, user, text, interactiveId) => {
 
 const generateTempPassword = () => String(Math.floor(1000000 + Math.random() * 9000000)); // 7 digits
 
-const generateMagicLink = async (user) => {
+const generateMagicLink = async (user, redirectPath = '') => {
   const crypto = require('crypto');
   const token = crypto.randomBytes(32).toString('hex');
   user.magicToken = token;
   user.magicTokenExpire = new Date(Date.now() + 30 * 60 * 1000); // 30 min
   await user.save();
-  return `${process.env.CLIENT_URL || 'https://shop.instify.in'}/magic-login?token=${token}`;
+  const base = `${process.env.CLIENT_URL || 'https://shop.instify.in'}/magic-login?token=${token}`;
+  return redirectPath ? `${base}&redirect=${encodeURIComponent(redirectPath)}` : base;
 };
 
 const useBotCmd = async (key, phone, fallback, { userId, name } = {}) => {
@@ -636,23 +637,35 @@ const handleUnknownUser = async (phone, text, interactiveId, session, profileNam
 
       session.state = 'idle'; session.context = {}; await session.save();
 
-      // Build confirmation message with optional magic link
-      let confirmMsg =
+      const confirmText =
         `✅ *Inquiry Received, ${buyerName}!*\n\n` +
-        `Your requirement for *${product}* (Qty: ${qty}) has been noted.\n\n` +
+        `📦 *Product:* ${product}\n` +
+        `📊 *Quantity:* ${qty}\n\n` +
         (sellers.length > 0
-          ? `We found *${sellers.length}* seller(s) — tap a contact below to call or WhatsApp them directly.`
+          ? `We found *${sellers.length}* seller(s) — they'll contact you shortly on WhatsApp.`
           : `Sellers will contact you shortly on WhatsApp.`);
 
+      // Send CTA URL button so buyer can track inquiry in dashboard
       if (session.userId) {
         const trackerUser = await User.findById(session.userId);
         if (trackerUser) {
-          const magicLink = await generateMagicLink(trackerUser);
-          confirmMsg += `\n\n🔗 *Track your inquiry:*\n${magicLink}`;
+          const trackLink = await generateMagicLink(trackerUser, '/dashboard/inquiries');
+          await wa.sendCtaUrlMessage(phone, confirmText, 'Track Inquiry', trackLink, session.userId);
+        } else {
+          await wa.sendTextMessage(phone, confirmText);
         }
+      } else {
+        await wa.sendTextMessage(phone, confirmText);
       }
-      await wa.sendTextMessage(phone, confirmMsg);
 
+      // Quick-reply buttons: Help + Menu
+      await wa.sendButtonMessage(phone,
+        `Need anything else?`,
+        [{ id: 'HELP', title: 'Help' }, { id: 'MENU', title: 'Main Menu' }],
+        session.userId || null
+      ).catch(() => {});
+
+      // Send seller notifications
       if (sellers.length > 0) {
         for (const s of sellers) {
           await wa.sendContactCard(phone, s).catch(() => {});
@@ -673,6 +686,24 @@ const handleUnknownUser = async (phone, text, interactiveId, session, profileNam
           await wa.sendContactCard(s.phone, { name: buyerName, businessName: '', phone: guestClean }, s._id).catch(() => {});
         }
       }
+
+      // 30-second reminder if buyer doesn't respond
+      const reminderRef = Date.now();
+      setTimeout(async () => {
+        try {
+          const latestSession = await WhatsAppSession.findOne({ phone });
+          if (!latestSession || latestSession.updatedAt.getTime() <= reminderRef) {
+            await wa.sendButtonMessage(phone,
+              `⏰ *Reminder – PrintMart*\n\nYour inquiry for *${product}* is live! Sellers will reach out soon.\n\nWant to place another inquiry or need help?`,
+              [{ id: 'GET_QUOTE', title: 'New Quote' }, { id: 'HELP', title: 'Help' }, { id: 'MENU', title: 'Main Menu' }],
+              session.userId || null
+            );
+          }
+        } catch (e) {
+          console.error('[WA-Bot] Reminder error:', e.message);
+        }
+      }, 30000);
+
     } catch (sellerLookupErr) {
       console.error('[WA-Bot] Seller lookup error:', sellerLookupErr.message);
       session.state = 'idle'; session.context = {}; await session.save();

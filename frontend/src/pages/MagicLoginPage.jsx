@@ -18,12 +18,13 @@ export default function MagicLoginPage() {
       return;
     }
 
+    const redirect = searchParams.get('redirect') || '/dashboard/profile';
     authAPI.magicLogin(token)
       .then(({ data }) => {
         localStorage.setItem('token', data.token);
         localStorage.setItem('user', JSON.stringify(data));
         updateUser(data);
-        navigate('/dashboard/profile', { replace: true });
+        navigate(redirect, { replace: true });
       })
       .catch((err) => {
         setError(err.response?.data?.message || 'This link is invalid or has expired.');

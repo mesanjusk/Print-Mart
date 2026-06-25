@@ -67,6 +67,24 @@ const sendButtonMessage = async (to, bodyText, buttons, userId) => {
   return result;
 };
 
+// Send CTA URL button message — button tap opens a URL (single button only)
+const sendCtaUrlMessage = async (to, bodyText, displayText, url, userId) => {
+  const payload = {
+    type: 'interactive',
+    interactive: {
+      type: 'cta_url',
+      body: { text: bodyText },
+      action: {
+        name: 'cta_url',
+        parameters: { display_text: displayText.slice(0, 20), url },
+      },
+    },
+  };
+  const result = await sendRaw(to, payload);
+  await logMessage({ direction: 'outbound', phone: normalisePhone(to), userId, messageType: 'interactive', message: bodyText, waMessageId: result?.messages?.[0]?.id });
+  return result;
+};
+
 // Send interactive list message
 const sendListMessage = async (to, bodyText, buttonLabel, sections, userId) => {
   const payload = {
@@ -459,6 +477,7 @@ module.exports = {
   sendPasswordResetOTP,
   sendTextMessage,
   sendButtonMessage,
+  sendCtaUrlMessage,
   sendListMessage,
   sendWelcomeBuyer,
   sendWelcomeSeller,

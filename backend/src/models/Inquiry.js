@@ -1,9 +1,14 @@
 const mongoose = require('mongoose');
 
 const inquirySchema = new mongoose.Schema({
-  product: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: true },
-  buyer: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  seller: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  product: { type: mongoose.Schema.Types.ObjectId, ref: 'Product' },
+  buyer: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  seller: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  // For unmatched / guest inquiries where FK is not available
+  productName: { type: String },
+  buyerPhone: { type: String },
+  buyerName: { type: String },
+  isUnmatched: { type: Boolean, default: false },
   message: { type: String, required: true },
   quantity: { type: Number, default: 1 },
   unit: { type: String, default: 'pieces' },

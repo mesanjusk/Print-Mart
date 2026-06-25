@@ -674,8 +674,8 @@ const handleUnknownUser = async (phone, text, interactiveId, session, profileNam
       const sellers = sellersWithProducts.map((sp) => sp.seller);
 
       // Save Inquiry records to DB so buyer can track them in dashboard
+      const parsedQty = parseInt(qty, 10);
       if (session.userId && sellersWithProducts.length > 0) {
-        const parsedQty = parseInt(qty, 10);
         await Promise.all(
           sellersWithProducts.map(({ seller, product: matchedProduct }) =>
             Inquiry.create({
@@ -687,6 +687,21 @@ const handleUnknownUser = async (phone, text, interactiveId, session, profileNam
             }).catch((e) => console.error('[WA-Bot] Inquiry save error:', e.message))
           )
         );
+      } else if (session.userId && sellersWithProducts.length === 0) {
+        // No sellers found — save unmatched inquiry so admin can follow up
+        Inquiry.create({
+          buyer: session.userId,
+          productName: product,
+          buyerName: buyerName,
+          message: `WhatsApp inquiry: ${product} × ${qty}`,
+          quantity: isNaN(parsedQty) ? 1 : parsedQty,
+          isUnmatched: true,
+        }).catch((e) => console.error('[WA-Bot] Unmatched inquiry save error:', e.message));
+        if (adminPhone) {
+          wa.sendTextMessage(adminPhone,
+            `⚠️ *No Sellers Found – PrintMart*\n\n📦 Product: *${product}*\n📊 Qty: ${qty}\n👤 Buyer: ${buyerName} (+${phone})\n\nNo active sellers match this product. Please follow up or add a seller.`
+          ).catch(() => {});
+        }
       }
 
       session.state = 'idle'; session.context = {}; await session.save();
@@ -699,7 +714,7 @@ const handleUnknownUser = async (phone, text, interactiveId, session, profileNam
         `📊 *Quantity:* ${qty}\n\n` +
         (sellers.length > 0
           ? `*${sellers.length}* seller(s) will contact you shortly on WhatsApp.`
-          : `Sellers will contact you shortly on WhatsApp.`);
+          : `We couldn't find a seller for *${product}* right now. We've logged your request — our team will follow up with you shortly.`);
 
       // Track Inquiry as CTA URL button (shown above Help/Menu)
       if (session.userId) {
@@ -841,9 +856,27 @@ const handleUnknownUser = async (phone, text, interactiveId, session, profileNam
       const CLIENT = process.env.CLIENT_URL || 'https://shop.instify.in';
       session.state = 'idle'; session.context = {}; await session.save();
 
+      // Save unmatched inquiry for guest when no sellers found
+      if (sellers.length === 0) {
+        const parsedQtyGuest = parseInt(qty, 10);
+        Inquiry.create({
+          productName: product,
+          buyerPhone: phone,
+          buyerName: guestName,
+          message: `WhatsApp guest inquiry: ${product} × ${qty}`,
+          quantity: isNaN(parsedQtyGuest) ? 1 : parsedQtyGuest,
+          isUnmatched: true,
+        }).catch((e) => console.error('[WA-Bot] Unmatched guest inquiry save error:', e.message));
+        if (adminPhone) {
+          wa.sendTextMessage(adminPhone,
+            `⚠️ *No Sellers Found – PrintMart*\n\n📦 Product: *${product}*\n📊 Qty: ${qty}\n👤 Guest: ${guestName} (+${phone})\n\nNo active sellers match this product. Please follow up or add a seller.`
+          ).catch(() => {});
+        }
+      }
+
       // Message 1: confirmation + Register button (single message)
       await wa.sendButtonMessage(phone,
-        `✅ *Thank you, ${guestName}!*\n\nYour requirement for *${product}* (Qty: ${qty}) has been received.\n\n${sellers.length > 0 ? `*${sellers.length}* seller(s) will contact you shortly.` : 'Sellers will contact you shortly.'}\n\nRegister free to track all your inquiries:`,
+        `✅ *Thank you, ${guestName}!*\n\nYour requirement for *${product}* (Qty: ${qty}) has been received.\n\n${sellers.length > 0 ? `*${sellers.length}* seller(s) will contact you shortly.` : `We couldn't find a seller right now. Our team will follow up with you on WhatsApp shortly.`}\n\nRegister free to track all your inquiries:`,
         [{ id: 'REGISTER', title: 'Register Free' }]
       );
 

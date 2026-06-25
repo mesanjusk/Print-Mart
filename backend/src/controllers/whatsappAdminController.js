@@ -3,6 +3,8 @@ const WhatsAppLog = require('../models/WhatsAppLog');
 const WhatsAppSession = require('../models/WhatsAppSession');
 const WhatsAppCampaign = require('../models/WhatsAppCampaign');
 const WhatsAppOptOut = require('../models/WhatsAppOptOut');
+const BotCommandModel = require('../models/BotCommand');
+const { DEFAULT_BOT_COMMANDS } = require('../models/BotCommand');
 const Order = require('../models/Order');
 const User = require('../models/User');
 const wa = require('../services/whatsapp');
@@ -304,6 +306,64 @@ const syncTemplatesFromMeta = asyncHandler(async (req, res) => {
   }
 });
 
+// ─── Bot Commands (Flow Builder) ─────────────────────────────────────────────
+
+const getBotCommands = asyncHandler(async (req, res) => {
+  const count = await BotCommandModel.countDocuments();
+  if (count === 0) {
+    await BotCommandModel.insertMany(DEFAULT_BOT_COMMANDS);
+  }
+  const commands = await BotCommandModel.find().sort({ role: 1, priority: 1 });
+  const grouped = {
+    unknown: commands.filter((c) => c.role === 'unknown'),
+    buyer: commands.filter((c) => c.role === 'buyer'),
+    seller: commands.filter((c) => c.role === 'seller'),
+    all: commands.filter((c) => c.role === 'all'),
+  };
+  res.json({ commands, grouped });
+});
+
+const createBotCommand = asyncHandler(async (req, res) => {
+  const { commandKey, name, description, role, triggerKeywords, matchType, response, isEnabled, exampleUsage } = req.body;
+  if (!commandKey || !name || !role) { res.status(400); throw new Error('commandKey, name and role are required'); }
+  const existing = await BotCommandModel.findOne({ commandKey, role });
+  if (existing) { res.status(409); throw new Error('A command with this key and role already exists'); }
+  const maxPriority = await BotCommandModel.find({ role }).sort({ priority: -1 }).limit(1);
+  const priority = maxPriority.length ? maxPriority[0].priority + 10 : 10;
+  const cmd = await BotCommandModel.create({
+    commandKey, name, description, role, triggerKeywords: triggerKeywords || [],
+    matchType: matchType || 'exact', response, isEnabled: isEnabled !== false,
+    isBuiltin: false, isDynamic: false, exampleUsage: exampleUsage || '', priority,
+  });
+  res.status(201).json(cmd);
+});
+
+const updateBotCommand = asyncHandler(async (req, res) => {
+  const cmd = await BotCommandModel.findById(req.params.id);
+  if (!cmd) { res.status(404); throw new Error('Command not found'); }
+  const allowed = ['name', 'description', 'triggerKeywords', 'matchType', 'response', 'isEnabled', 'exampleUsage', 'priority'];
+  allowed.forEach((k) => { if (req.body[k] !== undefined) cmd[k] = req.body[k]; });
+  await cmd.save();
+  res.json(cmd);
+});
+
+const deleteBotCommand = asyncHandler(async (req, res) => {
+  const cmd = await BotCommandModel.findById(req.params.id);
+  if (!cmd) { res.status(404); throw new Error('Command not found'); }
+  if (cmd.isBuiltin) { res.status(400); throw new Error('Built-in commands cannot be deleted'); }
+  await cmd.deleteOne();
+  res.json({ message: 'Command deleted' });
+});
+
+const reorderBotCommands = asyncHandler(async (req, res) => {
+  const { orderedIds } = req.body;
+  if (!Array.isArray(orderedIds)) { res.status(400); throw new Error('orderedIds array required'); }
+  await Promise.all(orderedIds.map((id, idx) =>
+    BotCommandModel.findByIdAndUpdate(id, { priority: (idx + 1) * 10 })
+  ));
+  res.json({ message: 'Order saved' });
+});
+
 module.exports = {
   getStats, getLogs,
   getConversations, getConversationByPhone, replyToConversation,
@@ -311,4 +371,5 @@ module.exports = {
   getCampaigns, createCampaign, updateCampaign, deleteCampaign, runCampaign,
   getOptOuts, addOptOut, removeOptOut,
   getWindowStatus, getTemplates, syncTemplatesFromMeta,
+  getBotCommands, createBotCommand, updateBotCommand, deleteBotCommand, reorderBotCommands,
 };

@@ -6,7 +6,9 @@ import {
   FiMessageSquare, FiSend, FiUsers, FiActivity, FiSettings,
   FiCheckCircle, FiXCircle, FiPhone, FiRefreshCw, FiRadio,
   FiClock, FiZap, FiTrash2, FiPlay, FiPause, FiPlus, FiEdit2,
-  FiChevronDown, FiChevronUp, FiAlertCircle, FiBell
+  FiChevronDown, FiChevronUp, FiAlertCircle, FiBell, FiMenu,
+  FiToggleLeft, FiToggleRight, FiArrowDown, FiCode, FiSave,
+  FiX, FiInfo, FiMove
 } from "react-icons/fi";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -1014,75 +1016,518 @@ function LogsPanel() {
   );
 }
 
-// ─── Bot Flow Panel ───────────────────────────────────────────────────────────
+// ─── Bot Flow Builder ─────────────────────────────────────────────────────────
+
+const ROLE_CONFIG = {
+  unknown: { label: "New / Unknown Users", color: "purple", bgClass: "bg-purple-50", borderClass: "border-purple-200", textClass: "text-purple-700", headerBg: "bg-purple-50", badgeClass: "bg-purple-100 text-purple-700" },
+  buyer:   { label: "Buyers",              color: "blue",   bgClass: "bg-blue-50",   borderClass: "border-blue-200",   textClass: "text-blue-700",   headerBg: "bg-blue-50",   badgeClass: "bg-blue-100 text-blue-700"   },
+  seller:  { label: "Sellers / Vendors",   color: "green",  bgClass: "bg-green-50",  borderClass: "border-green-200",  textClass: "text-green-700",  headerBg: "bg-green-50",  badgeClass: "bg-green-100 text-green-700"  },
+};
+
+function CommandCard({ cmd, index, onToggle, onEdit, onDelete, onDragStart, onDragOver, onDrop, onDragEnd, isDragTarget }) {
+  const [expanded, setExpanded] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [responseText, setResponseText] = useState(cmd.response?.text || "");
+  const [saving, setSaving] = useState(false);
+  const role = ROLE_CONFIG[cmd.role] || ROLE_CONFIG.buyer;
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await onEdit(cmd._id, { response: { ...cmd.response, text: responseText } });
+      setEditing(false);
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <div
+      draggable
+      onDragStart={(e) => onDragStart(e, index)}
+      onDragOver={(e) => { e.preventDefault(); onDragOver(index); }}
+      onDrop={(e) => { e.preventDefault(); onDrop(index); }}
+      onDragEnd={onDragEnd}
+      className={`border rounded-xl bg-white transition-all duration-150 select-none
+        ${isDragTarget ? "border-blue-400 shadow-lg scale-[1.01]" : "border-gray-200 hover:border-gray-300"}
+        ${!cmd.isEnabled ? "opacity-50" : ""}
+      `}
+    >
+      {/* Card header */}
+      <div className="flex items-center gap-3 p-3">
+        {/* Drag handle */}
+        <div className="cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500 flex-shrink-0 touch-none" title="Drag to reorder">
+          <FiMove size={16} />
+        </div>
+
+        {/* Priority badge */}
+        <span className="text-xs font-mono text-gray-400 w-6 text-center flex-shrink-0">{index + 1}</span>
+
+        {/* Command info */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-semibold text-gray-800 text-sm">{cmd.name}</span>
+            {cmd.isBuiltin && (
+              <span className="text-xs px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded-full">built-in</span>
+            )}
+            {cmd.isDynamic ? (
+              <span className="text-xs px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded-full flex items-center gap-1">
+                <FiCode size={9} /> dynamic
+              </span>
+            ) : (
+              <span className="text-xs px-1.5 py-0.5 bg-green-100 text-green-700 rounded-full">static</span>
+            )}
+          </div>
+          {cmd.triggerKeywords?.length > 0 && (
+            <div className="flex gap-1 flex-wrap mt-1">
+              {cmd.triggerKeywords.map((kw) => (
+                <span key={kw} className={`text-xs px-1.5 py-0.5 rounded font-mono ${role.badgeClass}`}>{kw.toUpperCase()}</span>
+              ))}
+              <span className="text-xs text-gray-400 self-center">({cmd.matchType})</span>
+            </div>
+          )}
+          {cmd.triggerKeywords?.length === 0 && (
+            <span className="text-xs text-gray-400 italic">fallback (no trigger keywords)</span>
+          )}
+        </div>
+
+        {/* Actions */}
+        <div className="flex items-center gap-1 flex-shrink-0">
+          {/* Toggle */}
+          <button
+            onClick={() => onToggle(cmd._id, !cmd.isEnabled)}
+            className={`p-1.5 rounded-lg transition-colors ${cmd.isEnabled ? "text-green-600 hover:bg-green-50" : "text-gray-400 hover:bg-gray-100"}`}
+            title={cmd.isEnabled ? "Disable" : "Enable"}
+          >
+            {cmd.isEnabled ? <FiToggleRight size={18} /> : <FiToggleLeft size={18} />}
+          </button>
+          {/* Expand */}
+          <button
+            onClick={() => setExpanded(!expanded)}
+            className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 transition-colors"
+            title="Show response"
+          >
+            {expanded ? <FiChevronUp size={16} /> : <FiChevronDown size={16} />}
+          </button>
+          {/* Delete (custom only) */}
+          {!cmd.isBuiltin && (
+            <button
+              onClick={() => onDelete(cmd._id)}
+              className="p-1.5 rounded-lg text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+              title="Delete"
+            >
+              <FiTrash2 size={14} />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Expanded response area */}
+      {expanded && (
+        <div className="border-t mx-3 mb-3 pt-3">
+          <p className="text-xs text-gray-500 mb-2">{cmd.description}</p>
+          {cmd.exampleUsage && (
+            <p className="text-xs text-gray-400 mb-3">
+              <span className="font-medium">Example:</span>{" "}
+              <span className="font-mono bg-gray-100 px-1.5 py-0.5 rounded text-gray-600">{cmd.exampleUsage}</span>
+            </p>
+          )}
+
+          <div className="bg-gray-50 rounded-lg p-3">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-medium text-gray-600">
+                {cmd.isDynamic ? "Response Preview (data-driven)" : "Bot Response"}
+              </span>
+              {!cmd.isDynamic && !editing && (
+                <button
+                  onClick={() => { setResponseText(cmd.response?.text || ""); setEditing(true); }}
+                  className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                >
+                  <FiEdit2 size={11} /> Edit
+                </button>
+              )}
+            </div>
+
+            {cmd.isDynamic && (
+              <div className="flex items-start gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 mb-2">
+                <FiInfo size={12} className="flex-shrink-0 mt-0.5" />
+                <span>This response is generated dynamically from live database data. The template below shows the format — actual values are filled in at runtime.</span>
+              </div>
+            )}
+
+            {editing ? (
+              <div className="space-y-2">
+                <textarea
+                  className="w-full text-xs font-mono bg-white border border-gray-200 rounded p-2 resize-y focus:outline-none focus:ring-1 focus:ring-blue-400"
+                  rows={8}
+                  value={responseText}
+                  onChange={(e) => setResponseText(e.target.value)}
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleSave}
+                    disabled={saving}
+                    className="btn-primary text-xs flex items-center gap-1 py-1.5 px-3"
+                  >
+                    {saving ? <Spinner size="sm" /> : <FiSave size={11} />} Save
+                  </button>
+                  <button
+                    onClick={() => setEditing(false)}
+                    className="btn-secondary text-xs py-1.5 px-3"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <pre className="text-xs text-gray-700 whitespace-pre-wrap font-sans leading-relaxed">
+                {cmd.response?.text || <span className="text-gray-400 italic">(no response text)</span>}
+              </pre>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AddCommandForm({ role, onSave, onCancel }) {
+  const [form, setForm] = useState({
+    commandKey: "", name: "", description: "", triggerKeywords: [],
+    matchType: "exact", exampleUsage: "", response: { type: "text", text: "" },
+  });
+  const [kwInput, setKwInput] = useState("");
+  const [saving, setSaving] = useState(false);
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  const addKw = () => {
+    if (!kwInput.trim()) return;
+    set("triggerKeywords", [...form.triggerKeywords, kwInput.trim().toLowerCase()]);
+    setKwInput("");
+  };
+
+  const handleSubmit = async () => {
+    if (!form.commandKey.trim() || !form.name.trim()) return toast.error("Command key and name are required");
+    if (form.triggerKeywords.length === 0) return toast.error("Add at least one trigger keyword");
+    setSaving(true);
+    try {
+      await onSave({ ...form, role });
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <div className="border-2 border-dashed border-blue-300 rounded-xl p-4 bg-blue-50/50 space-y-3">
+      <p className="text-sm font-semibold text-blue-700">New Custom Command</p>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="text-xs font-medium text-gray-600 mb-1 block">Command Key (unique ID)</label>
+          <input className="input w-full text-sm font-mono" placeholder="e.g. CUSTOM_PROMO" value={form.commandKey}
+            onChange={(e) => set("commandKey", e.target.value.toUpperCase().replace(/\s/g, "_"))} />
+        </div>
+        <div>
+          <label className="text-xs font-medium text-gray-600 mb-1 block">Display Name</label>
+          <input className="input w-full text-sm" placeholder="e.g. Promo Info" value={form.name}
+            onChange={(e) => set("name", e.target.value)} />
+        </div>
+      </div>
+      <div>
+        <label className="text-xs font-medium text-gray-600 mb-1 block">Description</label>
+        <input className="input w-full text-sm" placeholder="What does this command do?" value={form.description}
+          onChange={(e) => set("description", e.target.value)} />
+      </div>
+      <div>
+        <label className="text-xs font-medium text-gray-600 mb-1 block">Trigger Keywords</label>
+        <div className="flex gap-2 mb-2">
+          <input className="input flex-1 text-sm" placeholder="Type keyword, press Enter" value={kwInput}
+            onChange={(e) => setKwInput(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && addKw()} />
+          <button className="btn-secondary text-sm" onClick={addKw}><FiPlus size={14} /></button>
+        </div>
+        <div className="flex flex-wrap gap-1">
+          {form.triggerKeywords.map((kw) => (
+            <span key={kw} className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs font-mono">
+              {kw}
+              <button onClick={() => set("triggerKeywords", form.triggerKeywords.filter((k) => k !== kw))}>
+                <FiX size={10} />
+              </button>
+            </span>
+          ))}
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="text-xs font-medium text-gray-600 mb-1 block">Match Type</label>
+          <select className="input w-full text-sm" value={form.matchType} onChange={(e) => set("matchType", e.target.value)}>
+            <option value="exact">Exact match</option>
+            <option value="starts_with">Starts with keyword</option>
+            <option value="contains">Contains keyword</option>
+          </select>
+        </div>
+        <div>
+          <label className="text-xs font-medium text-gray-600 mb-1 block">Example Usage</label>
+          <input className="input w-full text-sm font-mono" placeholder="e.g. PROMO" value={form.exampleUsage}
+            onChange={(e) => set("exampleUsage", e.target.value)} />
+        </div>
+      </div>
+      <div>
+        <label className="text-xs font-medium text-gray-600 mb-1 block">Bot Response</label>
+        <textarea className="input w-full text-sm font-mono" rows={4}
+          placeholder="Type the exact message the bot will send..."
+          value={form.response.text}
+          onChange={(e) => set("response", { type: "text", text: e.target.value })} />
+      </div>
+      <div className="flex gap-2 pt-1">
+        <button className="btn-primary text-sm flex items-center gap-2" onClick={handleSubmit} disabled={saving}>
+          {saving ? <Spinner size="sm" /> : <FiCheckCircle size={14} />} Add Command
+        </button>
+        <button className="btn-secondary text-sm" onClick={onCancel}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
+function RoleFlowTab({ commands, roleKey, onToggle, onEdit, onDelete, onReorder, onAdd }) {
+  const cfg = ROLE_CONFIG[roleKey];
+  const [dragIndex, setDragIndex] = useState(null);
+  const [dragTarget, setDragTarget] = useState(null);
+  const [items, setItems] = useState(commands);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => { setItems(commands); }, [commands]);
+
+  const handleDragStart = (e, idx) => {
+    setDragIndex(idx);
+    e.dataTransfer.effectAllowed = "move";
+  };
+  const handleDragOver = (idx) => setDragTarget(idx);
+  const handleDragEnd = () => { setDragIndex(null); setDragTarget(null); };
+
+  const handleDrop = async (dropIdx) => {
+    if (dragIndex === null || dragIndex === dropIdx) { handleDragEnd(); return; }
+    const reordered = [...items];
+    const [moved] = reordered.splice(dragIndex, 1);
+    reordered.splice(dropIdx, 0, moved);
+    setItems(reordered);
+    handleDragEnd();
+    setSaving(true);
+    try {
+      await onReorder(reordered.map((c) => c._id));
+      toast.success("Order saved");
+    } catch { toast.error("Failed to save order"); setItems(commands); }
+    finally { setSaving(false); }
+  };
+
+  const handleAdd = async (data) => {
+    try {
+      await onAdd(data);
+      setShowAddForm(false);
+      toast.success("Command added");
+    } catch { toast.error("Failed to add command"); }
+  };
+
+  return (
+    <div className="space-y-2">
+      {/* Role header */}
+      <div className={`flex items-center justify-between px-4 py-2 rounded-xl ${cfg.bgClass} border ${cfg.borderClass}`}>
+        <div className="flex items-center gap-2">
+          <FiUsers size={15} className={cfg.textClass} />
+          <span className={`font-semibold text-sm ${cfg.textClass}`}>{cfg.label}</span>
+          <span className={`text-xs px-2 py-0.5 rounded-full ${cfg.badgeClass}`}>{items.length} commands</span>
+        </div>
+        <div className="flex items-center gap-2">
+          {saving && <Spinner size="sm" />}
+          <button
+            onClick={() => setShowAddForm(!showAddForm)}
+            className="btn-secondary text-xs flex items-center gap-1 py-1 px-2"
+          >
+            <FiPlus size={12} /> Add Custom
+          </button>
+        </div>
+      </div>
+
+      {showAddForm && (
+        <AddCommandForm role={roleKey} onSave={handleAdd} onCancel={() => setShowAddForm(false)} />
+      )}
+
+      {/* Command cards with flow arrows */}
+      {items.length === 0 ? (
+        <p className="text-center text-gray-400 py-6 text-sm">No commands configured for this role</p>
+      ) : (
+        items.map((cmd, idx) => (
+          <div key={cmd._id} className="relative">
+            <CommandCard
+              cmd={cmd}
+              index={idx}
+              onToggle={onToggle}
+              onEdit={onEdit}
+              onDelete={onDelete}
+              onDragStart={handleDragStart}
+              onDragOver={handleDragOver}
+              onDrop={handleDrop}
+              onDragEnd={handleDragEnd}
+              isDragTarget={dragTarget === idx && dragIndex !== idx}
+            />
+            {/* Flow arrow between cards (not after last) */}
+            {idx < items.length - 1 && (
+              <div className="flex justify-center my-1">
+                <div className="flex flex-col items-center">
+                  <div className="w-px h-3 bg-gray-300" />
+                  <FiArrowDown size={12} className="text-gray-300" />
+                </div>
+              </div>
+            )}
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
 
 function BotFlowPanel() {
-  const buyerCommands = [
-    { cmd: "Hi / Hello", desc: "Welcome message with menu options" },
-    { cmd: "Products / Browse", desc: "Browse available products" },
-    { cmd: "Orders", desc: "View your recent orders" },
-    { cmd: "Help", desc: "Show available commands" },
-    { cmd: "Quote", desc: "Request a price quote" },
-    { cmd: "Stop", desc: "Opt out of WhatsApp messages" },
-  ];
-  const sellerCommands = [
-    { cmd: "Hi / Hello", desc: "Welcome message with seller dashboard link" },
-    { cmd: "Orders", desc: "View incoming orders" },
-    { cmd: "Enquiries", desc: "View pending enquiries" },
-    { cmd: "Help", desc: "Show seller commands" },
-    { cmd: "Stats", desc: "Sales summary" },
-    { cmd: "Stop", desc: "Opt out of WhatsApp messages" },
+  const [grouped, setGrouped] = useState({ unknown: [], buyer: [], seller: [] });
+  const [loading, setLoading] = useState(true);
+  const [activeRole, setActiveRole] = useState("buyer");
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await waAdminAPI.getBotCommands();
+      setGrouped(res.data?.grouped || { unknown: [], buyer: [], seller: [] });
+    } catch { toast.error("Failed to load bot commands"); }
+    finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const handleToggle = async (id, isEnabled) => {
+    try {
+      await waAdminAPI.updateBotCommand(id, { isEnabled });
+      toast.success(isEnabled ? "Command enabled" : "Command disabled");
+      setGrouped((g) => {
+        const update = (arr) => arr.map((c) => c._id === id ? { ...c, isEnabled } : c);
+        return { unknown: update(g.unknown), buyer: update(g.buyer), seller: update(g.seller) };
+      });
+    } catch { toast.error("Failed to update command"); }
+  };
+
+  const handleEdit = async (id, updates) => {
+    await waAdminAPI.updateBotCommand(id, updates);
+    toast.success("Response saved");
+    setGrouped((g) => {
+      const update = (arr) => arr.map((c) => c._id === id ? { ...c, ...updates } : c);
+      return { unknown: update(g.unknown), buyer: update(g.buyer), seller: update(g.seller) };
+    });
+  };
+
+  const handleDelete = async (id) => {
+    if (!confirm("Delete this custom command?")) return;
+    try {
+      await waAdminAPI.deleteBotCommand(id);
+      toast.success("Command deleted");
+      setGrouped((g) => {
+        const remove = (arr) => arr.filter((c) => c._id !== id);
+        return { unknown: remove(g.unknown), buyer: remove(g.buyer), seller: remove(g.seller) };
+      });
+    } catch { toast.error("Failed to delete command"); }
+  };
+
+  const handleReorder = async (orderedIds) => {
+    await waAdminAPI.reorderBotCommands(orderedIds);
+  };
+
+  const handleAdd = async (data) => {
+    const res = await waAdminAPI.createBotCommand(data);
+    const newCmd = res.data;
+    setGrouped((g) => ({
+      ...g,
+      [newCmd.role]: [...(g[newCmd.role] || []), newCmd],
+    }));
+  };
+
+  if (loading) return <div className="flex justify-center py-20"><Spinner /></div>;
+
+  const roleTabs = [
+    { key: "buyer", label: "Buyers", icon: FiUsers },
+    { key: "seller", label: "Sellers", icon: FiActivity },
+    { key: "unknown", label: "New Users", icon: FiMessageSquare },
   ];
 
   return (
-    <div className="space-y-6">
-      <h2 className="text-lg font-semibold text-gray-800">Bot Reference</h2>
+    <div className="space-y-5">
+      {/* Header */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h2 className="text-lg font-semibold text-gray-800">Bot Flow Builder</h2>
+          <p className="text-xs text-gray-500 mt-0.5">Drag to reorder commands. Click to expand and edit responses.</p>
+        </div>
+        <button className="btn-secondary flex items-center gap-2 text-sm" onClick={load}>
+          <FiRefreshCw size={14} /> Refresh
+        </button>
+      </div>
+
+      {/* Priority info box */}
       <div className="card p-4 flex items-start gap-3 bg-purple-50 border-purple-200">
         <FiZap size={15} className="text-purple-500 mt-0.5 flex-shrink-0" />
         <div className="text-sm text-purple-700">
-          <p className="font-medium mb-1">Auto-Reply Priority Order</p>
-          <ol className="list-decimal list-inside space-y-0.5 text-xs">
-            <li>Opt-out commands (STOP, UNSUBSCRIBE)</li>
-            <li>Keyword-matched auto_reply campaigns (ordered by priority)</li>
-            <li>Bot flow commands (role-based)</li>
+          <p className="font-medium mb-1">How the bot processes messages</p>
+          <ol className="list-decimal list-inside space-y-0.5 text-xs text-purple-600">
+            <li>Opt-out check (STOP / UNSUBSCRIBE)</li>
+            <li>Auto-reply campaigns (keyword-matched, from Campaigns tab)</li>
+            <li>Role-based bot commands below (in priority order — drag to reorder)</li>
             <li>Default fallback reply</li>
           </ol>
         </div>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="card overflow-hidden">
-          <div className="px-4 py-3 border-b bg-blue-50 flex items-center gap-2">
-            <FiUsers size={15} className="text-blue-600" />
-            <h3 className="font-semibold text-blue-800">Buyer Commands</h3>
-          </div>
-          <table className="w-full text-sm">
-            <tbody>
-              {buyerCommands.map((c, i) => (
-                <tr key={i} className="border-t hover:bg-gray-50">
-                  <td className="px-4 py-2 font-mono text-xs text-blue-700 font-medium">{c.cmd}</td>
-                  <td className="px-4 py-2 text-gray-600">{c.desc}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <div className="card overflow-hidden">
-          <div className="px-4 py-3 border-b bg-green-50 flex items-center gap-2">
-            <FiActivity size={15} className="text-green-600" />
-            <h3 className="font-semibold text-green-800">Seller Commands</h3>
-          </div>
-          <table className="w-full text-sm">
-            <tbody>
-              {sellerCommands.map((c, i) => (
-                <tr key={i} className="border-t hover:bg-gray-50">
-                  <td className="px-4 py-2 font-mono text-xs text-green-700 font-medium">{c.cmd}</td>
-                  <td className="px-4 py-2 text-gray-600">{c.desc}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+
+      {/* Legend */}
+      <div className="flex flex-wrap gap-3 text-xs">
+        <span className="flex items-center gap-1.5 text-gray-500">
+          <span className="inline-block px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded-full">built-in</span>
+          = hardcoded logic (response editable, can't delete)
+        </span>
+        <span className="flex items-center gap-1.5 text-gray-500">
+          <span className="inline-block px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded-full">dynamic</span>
+          = response includes live DB data
+        </span>
+        <span className="flex items-center gap-1.5 text-gray-500">
+          <span className="inline-block px-1.5 py-0.5 bg-green-100 text-green-700 rounded-full">static</span>
+          = fixed text, fully editable
+        </span>
+        <span className="flex items-center gap-1.5 text-gray-500">
+          <FiMove size={12} /> = drag handle to reorder
+        </span>
       </div>
+
+      {/* Role tabs */}
+      <div className="flex gap-1 border-b">
+        {roleTabs.map(({ key, label, icon: Icon }) => (
+          <button
+            key={key}
+            onClick={() => setActiveRole(key)}
+            className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors -mb-px ${
+              activeRole === key
+                ? `border-${ROLE_CONFIG[key].color}-500 text-${ROLE_CONFIG[key].color}-700`
+                : "border-transparent text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            <Icon size={14} /> {label}
+            <span className="text-xs px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded-full">
+              {grouped[key]?.length || 0}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      {/* Active role flow */}
+      <RoleFlowTab
+        key={activeRole}
+        commands={grouped[activeRole] || []}
+        roleKey={activeRole}
+        onToggle={handleToggle}
+        onEdit={handleEdit}
+        onDelete={handleDelete}
+        onReorder={handleReorder}
+        onAdd={handleAdd}
+      />
     </div>
   );
 }
@@ -1099,7 +1544,7 @@ const TABS = [
   { id: "templates", label: "Templates", icon: FiSettings },
   { id: "optouts", label: "Opt-Outs", icon: FiXCircle },
   { id: "logs", label: "Logs", icon: FiActivity },
-  { id: "botref", label: "Bot Ref", icon: FiZap },
+  { id: "botflow", label: "Bot Flow", icon: FiMenu },
 ];
 
 export default function WhatsAppAdmin() {
@@ -1116,7 +1561,7 @@ export default function WhatsAppAdmin() {
       case "templates": return <TemplatesPanel />;
       case "optouts": return <OptOutPanel />;
       case "logs": return <LogsPanel />;
-      case "botref": return <BotFlowPanel />;
+      case "botflow": return <BotFlowPanel />;
       default: return null;
     }
   };

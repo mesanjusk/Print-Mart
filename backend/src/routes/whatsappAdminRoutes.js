@@ -8,6 +8,7 @@ const {
   getCampaigns, createCampaign, updateCampaign, deleteCampaign, runCampaign,
   getOptOuts, addOptOut, removeOptOut,
   getWindowStatus, getTemplates, syncTemplatesFromMeta,
+  getBotCommands, createBotCommand, updateBotCommand, deleteBotCommand, reorderBotCommands,
 } = require('../controllers/whatsappAdminController');
 
 const adminOnly = [protect, authorize('admin')];
@@ -31,5 +32,12 @@ router.delete('/optouts/:id', ...adminOnly, removeOptOut);
 router.get('/window-status', ...adminOnly, getWindowStatus);
 router.get('/templates', ...adminOnly, getTemplates);
 router.post('/templates/sync', ...adminOnly, syncTemplatesFromMeta);
+
+// Bot flow builder
+router.get('/bot-commands', ...adminOnly, getBotCommands);
+router.post('/bot-commands', ...adminOnly, createBotCommand);
+router.put('/bot-commands/reorder', ...adminOnly, reorderBotCommands);
+router.put('/bot-commands/:id', ...adminOnly, updateBotCommand);
+router.delete('/bot-commands/:id', ...adminOnly, deleteBotCommand);
 
 module.exports = router;

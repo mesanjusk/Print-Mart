@@ -607,14 +607,31 @@ const handleUnknownUser = async (phone, text, interactiveId, session, profileNam
         isActive: true,
       }).populate('seller', 'name businessName phone').lean();
 
-      const sellers = [];
+      const sellersWithProducts = [];
       const seen = new Set();
       for (const p of matchingProducts) {
         if (p.seller?.phone && !seen.has(String(p.seller._id))) {
-          sellers.push(p.seller);
+          sellersWithProducts.push({ seller: p.seller, product: p });
           seen.add(String(p.seller._id));
-          if (sellers.length >= 3) break;
+          if (sellersWithProducts.length >= 3) break;
         }
+      }
+      const sellers = sellersWithProducts.map((sp) => sp.seller);
+
+      // Save Inquiry records to DB so buyer can track them in dashboard
+      if (session.userId && sellersWithProducts.length > 0) {
+        const parsedQty = parseInt(qty, 10);
+        await Promise.all(
+          sellersWithProducts.map(({ seller, product: matchedProduct }) =>
+            Inquiry.create({
+              product: matchedProduct._id,
+              buyer: session.userId,
+              seller: seller._id,
+              message: `WhatsApp inquiry: ${product} × ${qty}`,
+              quantity: isNaN(parsedQty) ? 1 : parsedQty,
+            }).catch((e) => console.error('[WA-Bot] Inquiry save error:', e.message))
+          )
+        );
       }
 
       session.state = 'idle'; session.context = {}; await session.save();

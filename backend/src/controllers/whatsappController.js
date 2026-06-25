@@ -665,7 +665,8 @@ const handleUnknownUser = async (phone, text, interactiveId, session, profileNam
         session.userId || null
       ).catch(() => {});
 
-      // Send seller contacts to buyer as CTA button cards (one per seller)
+      // Send seller contacts to buyer — one Chat + one Call button per seller
+      const CLIENT = process.env.CLIENT_URL || 'https://shop.instify.in';
       if (sellers.length > 0) {
         for (const s of sellers) {
           const sellerClean = s.phone.replace(/\D/g, '');
@@ -678,9 +679,16 @@ const handleUnknownUser = async (phone, text, interactiveId, session, profileNam
             `https://wa.me/${sellerWaNum}`,
             session.userId || null
           ).catch(() => {});
+          await wa.sendCtaUrlMessage(
+            phone,
+            `📞 Call *${displayName}*`,
+            'Call Now',
+            `${CLIENT}/call?phone=${sellerWaNum}`,
+            session.userId || null
+          ).catch(() => {});
         }
 
-        // Notify each seller — buyer contact as CTA button card
+        // Notify each seller — buyer contact with Chat + Call buttons
         const guestClean = phone.replace(/\D/g, '');
         const buyerWaNum = guestClean.startsWith('91') ? guestClean : `91${guestClean}`;
         for (const s of sellers) {
@@ -689,6 +697,13 @@ const handleUnknownUser = async (phone, text, interactiveId, session, profileNam
             `🔔 *New Inquiry – PrintMart*\n\n📦 *Product:* ${product}\n📊 *Quantity:* ${qty}\n👤 *Buyer:* ${buyerName}\n📞 +${buyerWaNum}`,
             'Chat with Buyer',
             `https://wa.me/${buyerWaNum}`,
+            s._id
+          ).catch(() => {});
+          await wa.sendCtaUrlMessage(
+            s.phone,
+            `📞 Call *${buyerName}*`,
+            'Call Now',
+            `${CLIENT}/call?phone=${buyerWaNum}`,
             s._id
           ).catch(() => {});
         }
@@ -766,7 +781,8 @@ const handleUnknownUser = async (phone, text, interactiveId, session, profileNam
       );
 
       if (sellers.length > 0) {
-        // Send seller contacts to guest as CTA button cards (one per seller)
+        // Send seller contacts to guest — Chat + Call buttons per seller
+        const CLIENT = process.env.CLIENT_URL || 'https://shop.instify.in';
         for (const s of sellers) {
           const sellerClean = s.phone.replace(/\D/g, '');
           const sellerWaNum = sellerClean.startsWith('91') ? sellerClean : `91${sellerClean}`;
@@ -777,9 +793,15 @@ const handleUnknownUser = async (phone, text, interactiveId, session, profileNam
             'Chat on WhatsApp',
             `https://wa.me/${sellerWaNum}`
           ).catch(() => {});
+          await wa.sendCtaUrlMessage(
+            phone,
+            `📞 Call *${displayName}*`,
+            'Call Now',
+            `${CLIENT}/call?phone=${sellerWaNum}`
+          ).catch(() => {});
         }
 
-        // Notify each seller — buyer contact as CTA button card
+        // Notify each seller — buyer contact with Chat + Call buttons
         const guestClean = phone.replace(/\D/g, '');
         const buyerWaNum = guestClean.startsWith('91') ? guestClean : `91${guestClean}`;
         for (const s of sellers) {
@@ -788,6 +810,13 @@ const handleUnknownUser = async (phone, text, interactiveId, session, profileNam
             `🔔 *New Guest Inquiry – PrintMart*\n\n📦 *Product:* ${product}\n📊 *Quantity:* ${qty}\n👤 *Buyer:* ${guestName}\n📞 +${buyerWaNum}`,
             'Chat with Buyer',
             `https://wa.me/${buyerWaNum}`,
+            s._id
+          ).catch(() => {});
+          await wa.sendCtaUrlMessage(
+            s.phone,
+            `📞 Call *${guestName}*`,
+            'Call Now',
+            `${CLIENT}/call?phone=${buyerWaNum}`,
             s._id
           ).catch(() => {});
         }

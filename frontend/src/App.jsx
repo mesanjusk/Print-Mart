@@ -18,6 +18,7 @@ import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
 import VerifyEmailPage from './pages/VerifyEmailPage';
 import MagicLoginPage from './pages/MagicLoginPage';
+import CallRedirectPage from './pages/CallRedirectPage';
 
 export default function App() {
   return (
@@ -46,6 +47,7 @@ export default function App() {
           <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/verify-email" element={<VerifyEmailPage />} />
           <Route path="/magic-login" element={<MagicLoginPage />} />
+          <Route path="/call" element={<CallRedirectPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </Layout>

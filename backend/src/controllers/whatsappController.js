@@ -606,12 +606,12 @@ const handleUnknownUser = async (phone, text, interactiveId, session, profileNam
           { tags: { $elemMatch: { $regex: product, $options: 'i' } } },
         ],
         isActive: true,
-      }).populate('seller', 'name businessName phone').lean();
+      }).populate('seller', 'name businessName phone isActive').lean();
 
       const sellersWithProducts = [];
       const seen = new Set();
       for (const p of matchingProducts) {
-        if (p.seller?.phone && !seen.has(String(p.seller._id))) {
+        if (p.seller?.phone && p.seller?.isActive !== false && !seen.has(String(p.seller._id))) {
           sellersWithProducts.push({ seller: p.seller, product: p });
           seen.add(String(p.seller._id));
           if (sellersWithProducts.length >= 3) break;
@@ -665,12 +665,24 @@ const handleUnknownUser = async (phone, text, interactiveId, session, profileNam
         session.userId || null
       ).catch(() => {});
 
-      // Send seller notifications
+      // Send seller notifications with direct call/WhatsApp links
       if (sellers.length > 0) {
-        for (const s of sellers) {
-          await wa.sendContactCard(phone, s).catch(() => {});
-        }
+        // Build seller contact list for buyer
+        const sellerLines = sellers.map((s, i) => {
+          const sellerClean = s.phone.replace(/\D/g, '');
+          const waNum = sellerClean.startsWith('91') ? sellerClean : `91${sellerClean}`;
+          const displayName = s.businessName || s.name;
+          return `${i + 1}. *${displayName}*\n   📞 Call: +${waNum}\n   💬 WhatsApp: https://wa.me/${waNum}`;
+        }).join('\n\n');
+
+        await wa.sendTextMessage(phone,
+          `🏪 *Sellers who can help you:*\n\n${sellerLines}\n\nTap any link above to call or chat directly!`,
+          session.userId || null
+        ).catch(() => {});
+
+        // Notify each seller with buyer's direct contact links
         const guestClean = phone.replace(/\D/g, '');
+        const buyerWaNum = guestClean.startsWith('91') ? guestClean : `91${guestClean}`;
         for (const s of sellers) {
           await wa.sendTextMessage(s.phone,
             `🔔 *New Inquiry – PrintMart*\n\n` +
@@ -678,12 +690,11 @@ const handleUnknownUser = async (phone, text, interactiveId, session, profileNam
             `📦 *Product:* ${product}\n` +
             `📊 *Quantity:* ${qty}\n` +
             `👤 *Buyer:* ${buyerName}\n` +
-            `📱 *WhatsApp:* wa.me/${guestClean}\n` +
             `━━━━━━━━━━━━━━━━━━━━\n\n` +
-            `Tap the contact below to reach this buyer directly!`,
+            `📞 Call buyer: +${buyerWaNum}\n` +
+            `💬 WhatsApp: https://wa.me/${buyerWaNum}`,
             s._id
           ).catch(() => {});
-          await wa.sendContactCard(s.phone, { name: buyerName, businessName: '', phone: guestClean }, s._id).catch(() => {});
         }
       }
 
@@ -740,12 +751,12 @@ const handleUnknownUser = async (phone, text, interactiveId, session, profileNam
           { tags: { $elemMatch: { $regex: product, $options: 'i' } } },
         ],
         isActive: true,
-      }).populate('seller', 'name businessName phone').lean();
+      }).populate('seller', 'name businessName phone isActive').lean();
 
       const sellers = [];
       const seen = new Set();
       for (const p of matchingProducts) {
-        if (p.seller?.phone && !seen.has(String(p.seller._id))) {
+        if (p.seller?.phone && p.seller?.isActive !== false && !seen.has(String(p.seller._id))) {
           sellers.push(p.seller);
           seen.add(String(p.seller._id));
           if (sellers.length >= 3) break;
@@ -759,23 +770,28 @@ const handleUnknownUser = async (phone, text, interactiveId, session, profileNam
       );
 
       if (sellers.length > 0) {
-        // Send seller contacts to the guest as contact cards (shows native Call + WhatsApp buttons)
-        await wa.sendTextMessage(phone, `📋 We found *${sellers.length}* seller(s) for *${product}* on PrintMart. Tap a contact to call or WhatsApp them directly:`);
-        for (const s of sellers) {
-          await wa.sendContactCard(phone, s);
-        }
+        // Send direct call/WhatsApp links to the guest
+        const sellerLines = sellers.map((s, i) => {
+          const sellerClean = s.phone.replace(/\D/g, '');
+          const waNum = sellerClean.startsWith('91') ? sellerClean : `91${sellerClean}`;
+          const displayName = s.businessName || s.name;
+          return `${i + 1}. *${displayName}*\n   📞 Call: +${waNum}\n   💬 WhatsApp: https://wa.me/${waNum}`;
+        }).join('\n\n');
+        await wa.sendTextMessage(phone,
+          `🏪 *Sellers who can help you:*\n\n${sellerLines}\n\nTap any link above to call or chat directly!`
+        ).catch(() => {});
 
         // Notify each matching seller about this guest inquiry
         const guestClean = phone.replace(/\D/g, '');
+        const buyerWaNum = guestClean.startsWith('91') ? guestClean : `91${guestClean}`;
         for (const s of sellers) {
           await wa.sendTextMessage(s.phone,
             `🔔 *New Guest Inquiry – PrintMart*\n\n` +
-            `📦 Product: *${product}*\n` +
-            `📊 Quantity: *${qty}*\n` +
-            `👤 Name: *${guestName}*\n` +
-            `📱 WhatsApp: wa.me/${guestClean}\n\n` +
-            `Contact this buyer directly on WhatsApp to send your quote!\n` +
-            `Reply *STATUS* to see all your inquiries.`,
+            `📦 *Product:* ${product}\n` +
+            `📊 *Quantity:* ${qty}\n` +
+            `👤 *Buyer:* ${guestName}\n\n` +
+            `📞 Call buyer: +${buyerWaNum}\n` +
+            `💬 WhatsApp: https://wa.me/${buyerWaNum}`,
             s._id
           ).catch(() => {});
         }

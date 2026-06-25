@@ -111,14 +111,13 @@ const handleBuyerMessage = async (phone, user, text, interactiveId, session) => 
     session.markModified('context');
     await session.save();
     const magicLink = await generateMagicLink(user);
-    return wa.sendTextMessage(phone,
+    return wa.sendCtaUrlMessage(phone,
       `🎉 *You're now a Seller on PrintMart!*\n\n` +
       `🏪 Business: *${bizName}*\n` +
       `📍 City: *${city}*\n\n` +
-      `🔗 *Login to add your products:*\n${magicLink}\n\n` +
       `⚠️ Link expires in 30 minutes.\n` +
       `Add GSTIN and bank details from your Profile after login.`,
-      user._id
+      'Open Dashboard', magicLink, user._id
     );
   }
 
@@ -316,33 +315,81 @@ const handleSellerMessage = async (phone, user, text, interactiveId) => {
     return useBotCmd('seller_welcome', phone, () => wa.sendWelcomeSeller(phone, user.name, user._id), { userId: user._id, name: user.name });
   }
 
+  if (cmd.cmd === 'GET_QUOTE') {
+    const session = await WhatsAppSession.findOne({ phone });
+    if (session) {
+      session.state = 'guest_product';
+      session.context = {};
+      await session.save();
+    }
+    return wa.sendTextMessage(phone, `📦 *What product are you looking for?*\n\nPlease type the product name:\n_(e.g., Business Cards, Flyers, Banners, T-Shirts)_`, user._id);
+  }
+
   if (cmd.cmd === 'HELP') {
     return useBotCmd('seller_help', phone, () => wa.sendHelpSeller(phone, user._id), { userId: user._id });
   }
 
   if (cmd.cmd === 'STATUS') {
+    const total = await Inquiry.countDocuments({ seller: user._id, status: { $in: ['pending', 'responded'] } });
+    if (total === 0) {
+      return wa.sendButtonMessage(phone,
+        `📊 *Vendor Status – PrintMart*\n\nNo pending inquiries. 🎉`,
+        [{ id: 'ORDERS', title: 'My Orders' }, { id: 'MENU', title: 'Main Menu' }],
+        user._id
+      );
+    }
     const inquiries = await Inquiry.find({ seller: user._id, status: { $in: ['pending', 'responded'] } })
-      .populate('buyer', 'name').populate('product', 'name').sort({ createdAt: -1 }).limit(5);
-    const orders = await Order.find({ seller: user._id, status: { $in: ['paid', 'processing', 'dispatched'] } })
-      .sort({ createdAt: -1 }).limit(5);
+      .populate('buyer', 'name phone').populate('product', 'name').sort({ createdAt: -1 }).limit(3);
 
-    let body = `📊 *Vendor Status – PrintMart*\n\n`;
-    if (inquiries.length) {
-      body += `*Pending Inquiries (${inquiries.length}):*\n`;
-      inquiries.forEach((inq, i) => {
-        const shortId = String(inq._id).slice(-6).toUpperCase();
-        body += `${i + 1}. INQ-${shortId} – ${inq.product?.name || 'Product'} from ${inq.buyer?.name || 'Buyer'} [${inq.status}]\n`;
-      });
-      body += '\n';
-    }
-    if (orders.length) {
-      body += `*Active Orders (${orders.length}):*\n`;
-      orders.forEach((o, i) => {
-        body += `${i + 1}. ${o.orderNumber} – ₹${o.total.toFixed(2)} [${o.status.replace('_', ' ')}]\n`;
-      });
-    }
-    if (!inquiries.length && !orders.length) body += `No pending inquiries or active orders. 🎉`;
-    return wa.sendTextMessage(phone, body, user._id);
+    const sellerSess = await WhatsAppSession.findOne({ phone });
+    if (sellerSess) { sellerSess.context = { ...sellerSess.context, inqOffset: 3 }; await sellerSess.save(); }
+
+    let body = `📊 *You have ${total} pending ${total === 1 ? 'inquiry' : 'inquiries'}*\n\n`;
+    inquiries.forEach((inq, i) => {
+      const bp = (inq.buyer?.phone || '').replace(/\D/g, '');
+      const bNum = bp.startsWith('91') ? bp : (bp.length === 10 ? `91${bp}` : bp);
+      const dt = inq.createdAt ? new Date(inq.createdAt).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true }) : '';
+      body += `━━━━━━━━━━━━━━━━\n`;
+      body += `*${i + 1}. ${inq.product?.name || 'Product'}*\n`;
+      body += `   👤 ${inq.buyer?.name || 'Buyer'}\n`;
+      if (bNum) body += `   📞 +${bNum}\n`;
+      body += `   📦 Qty: ${inq.quantity || 1}\n`;
+      body += `   🕐 ${dt}\n`;
+    });
+
+    const btns = total > 3
+      ? [{ id: 'MORE_INQ', title: `More (${total - 3} left)` }, { id: 'GET_QUOTE', title: 'Get a Quote' }, { id: 'ORDERS', title: 'My Orders' }]
+      : [{ id: 'GET_QUOTE', title: 'Get a Quote' }, { id: 'ORDERS', title: 'My Orders' }, { id: 'MENU', title: 'Main Menu' }];
+    return wa.sendButtonMessage(phone, body, btns, user._id);
+  }
+
+  if (cmd.cmd === 'MORE_INQ') {
+    const sellerSess = await WhatsAppSession.findOne({ phone });
+    const offset = sellerSess?.context?.inqOffset || 3;
+    const total = await Inquiry.countDocuments({ seller: user._id, status: { $in: ['pending', 'responded'] } });
+    const inquiries = await Inquiry.find({ seller: user._id, status: { $in: ['pending', 'responded'] } })
+      .populate('buyer', 'name phone').populate('product', 'name').sort({ createdAt: -1 }).skip(offset).limit(3);
+    if (!inquiries.length) return wa.sendTextMessage(phone, `No more inquiries.`, user._id);
+
+    if (sellerSess) { sellerSess.context = { ...sellerSess.context, inqOffset: offset + 3 }; await sellerSess.save(); }
+
+    let body = `📋 *Inquiries ${offset + 1}–${offset + inquiries.length} of ${total}*\n\n`;
+    inquiries.forEach((inq, i) => {
+      const bp = (inq.buyer?.phone || '').replace(/\D/g, '');
+      const bNum = bp.startsWith('91') ? bp : (bp.length === 10 ? `91${bp}` : bp);
+      const dt = inq.createdAt ? new Date(inq.createdAt).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true }) : '';
+      body += `━━━━━━━━━━━━━━━━\n`;
+      body += `*${offset + i + 1}. ${inq.product?.name || 'Product'}*\n`;
+      body += `   👤 ${inq.buyer?.name || 'Buyer'}\n`;
+      if (bNum) body += `   📞 +${bNum}\n`;
+      body += `   📦 Qty: ${inq.quantity || 1}\n`;
+      body += `   🕐 ${dt}\n`;
+    });
+
+    const btns = offset + 3 < total
+      ? [{ id: 'MORE_INQ', title: `More (${total - offset - 3} left)` }, { id: 'GET_QUOTE', title: 'Get a Quote' }, { id: 'ORDERS', title: 'My Orders' }]
+      : [{ id: 'GET_QUOTE', title: 'Get a Quote' }, { id: 'ORDERS', title: 'My Orders' }, { id: 'MENU', title: 'Main Menu' }];
+    return wa.sendButtonMessage(phone, body, btns, user._id);
   }
 
   if (cmd.cmd === 'ORDERS') {
@@ -543,8 +590,9 @@ const handleUnknownUser = async (phone, text, interactiveId, session, profileNam
       const existingUser = await User.findOne({ phone: { $regex: last10r } });
       if (existingUser) {
         const magicLink = await generateMagicLink(existingUser);
-        return wa.sendTextMessage(phone,
-          `🔑 *Login Link*\n\nHi *${existingUser.name}*! Click below to login and set your password:\n\n🔗 ${magicLink}\n\n⚠️ Link expires in 30 minutes.\nGo to Profile → Change Password after logging in.`
+        return wa.sendCtaUrlMessage(phone,
+          `🔑 *Password Reset*\n\nHi *${existingUser.name}*!\n\nTap below to login and set your password.\n⚠️ Link expires in 30 minutes.\nGo to Profile → Change Password after logging in.`,
+          'Reset Password', magicLink
         );
       }
       return wa.sendTextMessage(phone, `⚠️ No account found for this number.\n\nReply *SELL* to join as a seller.`);
@@ -606,12 +654,18 @@ const handleUnknownUser = async (phone, text, interactiveId, session, profileNam
           { tags: { $elemMatch: { $regex: product, $options: 'i' } } },
         ],
         isActive: true,
-      }).populate('seller', 'name businessName phone').lean();
+      }).populate('seller', 'name businessName phone isActive').lean();
 
       const sellersWithProducts = [];
       const seen = new Set();
       for (const p of matchingProducts) {
-        if (p.seller?.phone && !seen.has(String(p.seller._id))) {
+        // Skip inactive sellers and skip if the requesting user is the seller themselves
+        if (
+          p.seller?.phone &&
+          p.seller?.isActive !== false &&
+          !seen.has(String(p.seller._id)) &&
+          String(p.seller._id) !== String(session.userId)
+        ) {
           sellersWithProducts.push({ seller: p.seller, product: p });
           seen.add(String(p.seller._id));
           if (sellersWithProducts.length >= 3) break;
@@ -620,8 +674,8 @@ const handleUnknownUser = async (phone, text, interactiveId, session, profileNam
       const sellers = sellersWithProducts.map((sp) => sp.seller);
 
       // Save Inquiry records to DB so buyer can track them in dashboard
+      const parsedQty = parseInt(qty, 10);
       if (session.userId && sellersWithProducts.length > 0) {
-        const parsedQty = parseInt(qty, 10);
         await Promise.all(
           sellersWithProducts.map(({ seller, product: matchedProduct }) =>
             Inquiry.create({
@@ -633,61 +687,103 @@ const handleUnknownUser = async (phone, text, interactiveId, session, profileNam
             }).catch((e) => console.error('[WA-Bot] Inquiry save error:', e.message))
           )
         );
+      } else if (session.userId && sellersWithProducts.length === 0) {
+        // No sellers found — save unmatched inquiry so admin can follow up
+        Inquiry.create({
+          buyer: session.userId,
+          productName: product,
+          buyerName: buyerName,
+          message: `WhatsApp inquiry: ${product} × ${qty}`,
+          quantity: isNaN(parsedQty) ? 1 : parsedQty,
+          isUnmatched: true,
+        }).catch((e) => console.error('[WA-Bot] Unmatched inquiry save error:', e.message));
+        if (adminPhone) {
+          wa.sendTextMessage(adminPhone,
+            `⚠️ *No Sellers Found – PrintMart*\n\n📦 Product: *${product}*\n📊 Qty: ${qty}\n👤 Buyer: ${buyerName} (+${phone})\n\nNo active sellers match this product. Please follow up or add a seller.`
+          ).catch(() => {});
+        }
       }
 
       session.state = 'idle'; session.context = {}; await session.save();
 
-      const confirmText =
+      const CLIENT = process.env.CLIENT_URL || 'https://shop.instify.in';
+
+      const confirmBody =
         `✅ *Inquiry Received, ${buyerName}!*\n\n` +
         `📦 *Product:* ${product}\n` +
         `📊 *Quantity:* ${qty}\n\n` +
         (sellers.length > 0
-          ? `We found *${sellers.length}* seller(s) — they'll contact you shortly on WhatsApp.`
-          : `Sellers will contact you shortly on WhatsApp.`);
+          ? `*${sellers.length}* seller(s) will contact you shortly on WhatsApp.`
+          : `We couldn't find a seller for *${product}* right now. We've logged your request — our team will follow up with you shortly.`);
 
-      // Send CTA URL button so buyer can track inquiry in dashboard
+      // Track Inquiry as CTA URL button (shown above Help/Menu)
       if (session.userId) {
         const trackerUser = await User.findById(session.userId);
         if (trackerUser) {
           const trackLink = await generateMagicLink(trackerUser, '/dashboard/inquiries');
-          await wa.sendCtaUrlMessage(phone, confirmText, 'Track Inquiry', trackLink, session.userId);
+          await wa.sendCtaUrlMessage(phone, confirmBody, 'Track Inquiry', trackLink, session.userId);
         } else {
-          await wa.sendTextMessage(phone, confirmText);
+          await wa.sendTextMessage(phone, confirmBody, null);
         }
       } else {
-        await wa.sendTextMessage(phone, confirmText);
+        await wa.sendTextMessage(phone, confirmBody, null);
       }
 
-      // Quick-reply buttons: Help + Menu
+      // Help + Menu quick-reply buttons (separate message, appears below Track button)
       await wa.sendButtonMessage(phone,
         `Need anything else?`,
         [{ id: 'HELP', title: 'Help' }, { id: 'MENU', title: 'Main Menu' }],
         session.userId || null
       ).catch(() => {});
 
-      // Send seller notifications
+      // Per seller: Chat button + Call button (2 CTA messages, both as buttons)
       if (sellers.length > 0) {
         for (const s of sellers) {
-          await wa.sendContactCard(phone, s).catch(() => {});
+          const sellerClean = s.phone.replace(/\D/g, '');
+          const sellerWaNum = sellerClean.startsWith('91') ? sellerClean : `91${sellerClean}`;
+          const displayName = s.businessName || s.name;
+          await wa.sendCtaUrlMessage(
+            phone,
+            `🏪 *${displayName}*\n📞 +${sellerWaNum}`,
+            'Chat on WhatsApp',
+            `https://wa.me/${sellerWaNum}`,
+            session.userId || null
+          ).catch(() => {});
+          await wa.sendCtaUrlMessage(
+            phone,
+            `📞 Call *${displayName}*`,
+            'Call Now',
+            `${CLIENT}/call?phone=${sellerWaNum}`,
+            session.userId || null
+          ).catch(() => {});
         }
+
+        // Notify sellers only if within 24-hour messaging window
         const guestClean = phone.replace(/\D/g, '');
+        const buyerWaNum = guestClean.startsWith('91') ? guestClean : `91${guestClean}`;
+        const cutoff24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
         for (const s of sellers) {
-          await wa.sendTextMessage(s.phone,
-            `🔔 *New Inquiry – PrintMart*\n\n` +
-            `━━━━━━━━━━━━━━━━━━━━\n` +
-            `📦 *Product:* ${product}\n` +
-            `📊 *Quantity:* ${qty}\n` +
-            `👤 *Buyer:* ${buyerName}\n` +
-            `📱 *WhatsApp:* wa.me/${guestClean}\n` +
-            `━━━━━━━━━━━━━━━━━━━━\n\n` +
-            `Tap the contact below to reach this buyer directly!`,
+          const sellerNorm = s.phone.replace(/\D/g, '');
+          const withinWindow = await WhatsAppLog.exists({ phone: sellerNorm, direction: 'inbound', createdAt: { $gte: cutoff24h } });
+          if (!withinWindow) continue;
+          await wa.sendCtaUrlMessage(
+            s.phone,
+            `🔔 *New Inquiry – PrintMart*\n\n📦 *Product:* ${product}\n📊 *Quantity:* ${qty}\n👤 *Buyer:* ${buyerName}\n📞 +${buyerWaNum}`,
+            'Chat with Buyer',
+            `https://wa.me/${buyerWaNum}`,
             s._id
           ).catch(() => {});
-          await wa.sendContactCard(s.phone, { name: buyerName, businessName: '', phone: guestClean }, s._id).catch(() => {});
+          await wa.sendCtaUrlMessage(
+            s.phone,
+            `📞 Call *${buyerName}*`,
+            'Call Now',
+            `${CLIENT}/call?phone=${buyerWaNum}`,
+            s._id
+          ).catch(() => {});
         }
       }
 
-      // 30-second reminder if buyer doesn't respond
+      // 60-second reminder if buyer doesn't respond
       const reminderRef = Date.now();
       setTimeout(async () => {
         try {
@@ -702,7 +798,7 @@ const handleUnknownUser = async (phone, text, interactiveId, session, profileNam
         } catch (e) {
           console.error('[WA-Bot] Reminder error:', e.message);
         }
-      }, 30000);
+      }, 60000);
 
     } catch (sellerLookupErr) {
       console.error('[WA-Bot] Seller lookup error:', sellerLookupErr.message);
@@ -740,42 +836,90 @@ const handleUnknownUser = async (phone, text, interactiveId, session, profileNam
           { tags: { $elemMatch: { $regex: product, $options: 'i' } } },
         ],
         isActive: true,
-      }).populate('seller', 'name businessName phone').lean();
+      }).populate('seller', 'name businessName phone isActive').lean();
 
       const sellers = [];
       const seen = new Set();
       for (const p of matchingProducts) {
-        if (p.seller?.phone && !seen.has(String(p.seller._id))) {
+        if (
+          p.seller?.phone &&
+          p.seller?.isActive !== false &&
+          !seen.has(String(p.seller._id)) &&
+          String(p.seller._id) !== String(session.userId)
+        ) {
           sellers.push(p.seller);
           seen.add(String(p.seller._id));
           if (sellers.length >= 3) break;
         }
       }
 
+      const CLIENT = process.env.CLIENT_URL || 'https://shop.instify.in';
       session.state = 'idle'; session.context = {}; await session.save();
+
+      // Save unmatched inquiry for guest when no sellers found
+      if (sellers.length === 0) {
+        const parsedQtyGuest = parseInt(qty, 10);
+        Inquiry.create({
+          productName: product,
+          buyerPhone: phone,
+          buyerName: guestName,
+          message: `WhatsApp guest inquiry: ${product} × ${qty}`,
+          quantity: isNaN(parsedQtyGuest) ? 1 : parsedQtyGuest,
+          isUnmatched: true,
+        }).catch((e) => console.error('[WA-Bot] Unmatched guest inquiry save error:', e.message));
+        if (adminPhone) {
+          wa.sendTextMessage(adminPhone,
+            `⚠️ *No Sellers Found – PrintMart*\n\n📦 Product: *${product}*\n📊 Qty: ${qty}\n👤 Guest: ${guestName} (+${phone})\n\nNo active sellers match this product. Please follow up or add a seller.`
+          ).catch(() => {});
+        }
+      }
+
+      // Message 1: confirmation + Register button (single message)
       await wa.sendButtonMessage(phone,
-        `✅ *Thank you, ${guestName}!*\n\nYour requirement for *${product}* (Qty: ${qty}) has been received.\n\nOur sellers will contact you on WhatsApp shortly.\n\nRegister free to track all your inquiries and orders:`,
+        `✅ *Thank you, ${guestName}!*\n\nYour requirement for *${product}* (Qty: ${qty}) has been received.\n\n${sellers.length > 0 ? `*${sellers.length}* seller(s) will contact you shortly.` : `We couldn't find a seller right now. Our team will follow up with you on WhatsApp shortly.`}\n\nRegister free to track all your inquiries:`,
         [{ id: 'REGISTER', title: 'Register Free' }]
       );
 
       if (sellers.length > 0) {
-        // Send seller contacts to the guest as contact cards (shows native Call + WhatsApp buttons)
-        await wa.sendTextMessage(phone, `📋 We found *${sellers.length}* seller(s) for *${product}* on PrintMart. Tap a contact to call or WhatsApp them directly:`);
+        // Per seller: Chat button + Call button (both as CTA buttons)
         for (const s of sellers) {
-          await wa.sendContactCard(phone, s);
+          const sellerClean = s.phone.replace(/\D/g, '');
+          const sellerWaNum = sellerClean.startsWith('91') ? sellerClean : `91${sellerClean}`;
+          const displayName = s.businessName || s.name;
+          await wa.sendCtaUrlMessage(
+            phone,
+            `🏪 *${displayName}*\n📞 +${sellerWaNum}`,
+            'Chat on WhatsApp',
+            `https://wa.me/${sellerWaNum}`
+          ).catch(() => {});
+          await wa.sendCtaUrlMessage(
+            phone,
+            `📞 Call *${displayName}*`,
+            'Call Now',
+            `${CLIENT}/call?phone=${sellerWaNum}`
+          ).catch(() => {});
         }
 
-        // Notify each matching seller about this guest inquiry
+        // Notify sellers only if within 24-hour messaging window
         const guestClean = phone.replace(/\D/g, '');
+        const buyerWaNum = guestClean.startsWith('91') ? guestClean : `91${guestClean}`;
+        const cutoff24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
         for (const s of sellers) {
-          await wa.sendTextMessage(s.phone,
-            `🔔 *New Guest Inquiry – PrintMart*\n\n` +
-            `📦 Product: *${product}*\n` +
-            `📊 Quantity: *${qty}*\n` +
-            `👤 Name: *${guestName}*\n` +
-            `📱 WhatsApp: wa.me/${guestClean}\n\n` +
-            `Contact this buyer directly on WhatsApp to send your quote!\n` +
-            `Reply *STATUS* to see all your inquiries.`,
+          const sellerNorm = s.phone.replace(/\D/g, '');
+          const withinWindow = await WhatsAppLog.exists({ phone: sellerNorm, direction: 'inbound', createdAt: { $gte: cutoff24h } });
+          if (!withinWindow) continue;
+          await wa.sendCtaUrlMessage(
+            s.phone,
+            `🔔 *New Inquiry – PrintMart*\n\n📦 *Product:* ${product}\n📊 *Quantity:* ${qty}\n👤 *Buyer:* ${guestName}\n📞 +${buyerWaNum}`,
+            'Chat with Buyer',
+            `https://wa.me/${buyerWaNum}`,
+            s._id
+          ).catch(() => {});
+          await wa.sendCtaUrlMessage(
+            s.phone,
+            `📞 Call *${guestName}*`,
+            'Call Now',
+            `${CLIENT}/call?phone=${buyerWaNum}`,
             s._id
           ).catch(() => {});
         }
@@ -866,15 +1010,15 @@ const handleUnknownUser = async (phone, text, interactiveId, session, profileNam
       session.markModified('context');
       await session.save();
 
-      const magicLink = await generateMagicLink(phoneExists);
-      return wa.sendTextMessage(phone,
+      const magicLink = await generateMagicLink(phoneExists, '/dashboard/inquiries');
+      return wa.sendCtaUrlMessage(phone,
         `✅ *Registration Complete!*\n\n` +
         `👤 Name: ${name}\n` +
         (email ? `📧 Email: ${email}\n` : '') +
         `📱 Phone: +${phone}\n` +
         `👤 Role: ${phoneExists.role}\n\n` +
-        `🔗 *Click to login & set your password:*\n${magicLink}\n\n` +
-        `⚠️ Link expires in 30 minutes.\nReply *MENU* to continue.`
+        `⚠️ Link expires in 30 minutes.`,
+        'Login Now', magicLink
       );
     }
 
@@ -895,17 +1039,17 @@ const handleUnknownUser = async (phone, text, interactiveId, session, profileNam
       session.markModified('context');
       await session.save();
 
-      const magicLink = await generateMagicLink(user);
+      const magicLink = await generateMagicLink(user, '/dashboard/inquiries');
 
-      await wa.sendTextMessage(phone,
+      await wa.sendCtaUrlMessage(phone,
         `✅ *Registration Successful!*\n\n` +
         `👤 Name: ${name}\n` +
         (email ? `📧 Email: ${email}\n` : '') +
         `📱 Phone: ${withPlus}\n` +
         `👤 Role: ${role || 'buyer'}\n\n` +
-        `🔗 *Click to login & set your password:*\n${magicLink}\n\n` +
         `⚠️ Link expires in 30 minutes.\n` +
-        `Add your email in Profile for notifications after login.`
+        `Add your email in Profile for notifications after login.`,
+        'Login Now', magicLink
       );
 
       console.log(`[WA-Register] New ${role} account: ${name} (${email || 'no email'}) from ${withPlus}`);
@@ -974,8 +1118,9 @@ const handleUnknownUser = async (phone, text, interactiveId, session, profileNam
     if (phoneExistsSell) {
       session.state = 'idle'; session.context = {}; await session.save();
       const magicLink = await generateMagicLink(phoneExistsSell);
-      return wa.sendTextMessage(phone,
-        `👋 *${phoneExistsSell.name}*, you already have an account!\n\n🔗 Click to login:\n${magicLink}\n\n⚠️ Link expires in 30 minutes.`
+      return wa.sendCtaUrlMessage(phone,
+        `👋 *${phoneExistsSell.name}*, you already have an account!\n\n⚠️ Link expires in 30 minutes.`,
+        'Login Now', magicLink
       );
     }
 
@@ -997,17 +1142,17 @@ const handleUnknownUser = async (phone, text, interactiveId, session, profileNam
       session.markModified('context');
       await session.save();
 
-      const magicLink = await generateMagicLink(newSeller);
+      const magicLink = await generateMagicLink(newSeller, '/dashboard/profile');
 
-      return wa.sendTextMessage(phone,
+      return wa.sendCtaUrlMessage(phone,
         `🎉 *Welcome to PrintMart as a Seller!*\n\n` +
         `👤 Name: ${name}\n` +
         `🏪 Business: ${businessName}\n` +
         `📍 City: ${city}\n` +
         `📱 Phone: ${withPlus}\n\n` +
-        `🔗 *Login to add your products:*\n${magicLink}\n\n` +
         `⚠️ Link expires in 30 minutes.\n` +
-        `Add email, GSTIN and bank details from your Profile after login.`
+        `Add email, GSTIN and bank details from your Profile after login.`,
+        'Open Dashboard', magicLink
       );
     } catch (err) {
       console.error('[WA-Sell] Error creating seller account:', err.code, err.message);
@@ -1158,26 +1303,25 @@ const webhookReceive = async (req, res) => {
             // REGISTER — already registered: send magic login link
             if (['REGISTER', 'JOIN', 'SIGNUP', 'NEW ACCOUNT', 'START'].includes(upperText) && user) {
               const magicLink = await generateMagicLink(user);
-              await wa.sendTextMessage(from,
+              await wa.sendCtaUrlMessage(from,
                 `👋 Welcome back, *${user.name}*!\n\n` +
                 `You already have a PrintMart account.\n\n` +
                 (user.email ? `📧 Email: ${user.email}\n` : '') +
                 `📱 Phone: ${user.phone}\n` +
                 `👤 Role: ${user.role}\n\n` +
-                `🔗 *Click to login & change password:*\n${magicLink}\n\n` +
-                `⚠️ Link expires in 30 minutes.\n` +
-                `Reply *MENU* after logging in.`
+                `⚠️ Link expires in 30 minutes.`,
+                'Login Now', magicLink
               );
 
             // RESET — send magic login link
             } else if (upperText === 'RESET' && user) {
               const magicLink = await generateMagicLink(user);
-              await wa.sendTextMessage(from,
+              await wa.sendCtaUrlMessage(from,
                 `🔑 *Password Reset*\n\n` +
-                `Click the link below to login and set a new password:\n\n` +
-                `🔗 ${magicLink}\n\n` +
+                `Tap below to login and set a new password.\n\n` +
                 `⚠️ Link expires in 30 minutes.\n` +
-                `Go to Profile → Change Password after logging in.`
+                `Go to Profile → Change Password after logging in.`,
+                'Reset Password', magicLink
               );
 
             // SELLER — buyer requesting upgrade (collect mandatory business details)

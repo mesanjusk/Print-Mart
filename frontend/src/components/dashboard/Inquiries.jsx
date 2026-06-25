@@ -129,8 +129,11 @@ export default function Inquiries() {
                 <div className="flex items-start gap-3">
                   <div className="flex-grow min-w-0">
                     <div className="flex items-center gap-2 flex-wrap mb-1">
-                      <h3 className="font-medium text-gray-800 text-sm">{inq.product?.name}</h3>
+                      <h3 className="font-medium text-gray-800 text-sm">{inq.product?.name || inq.productName || 'Unknown Product'}</h3>
                       <span className={`badge ${statusColor[inq.status]}`}>{inq.status}</span>
+                      {inq.isUnmatched && (
+                        <span className="badge bg-orange-100 text-orange-700">no sellers yet</span>
+                      )}
                       {inq.sellerInterests?.length > 0 && (
                         <span className="badge bg-green-100 text-green-700">
                           {inq.sellerInterests.length} seller{inq.sellerInterests.length !== 1 ? 's' : ''} ready

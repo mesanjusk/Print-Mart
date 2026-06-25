@@ -115,8 +115,8 @@ const DEFAULT_COMMANDS = [
       type: 'button',
       text: `👋 Welcome back, *{name}*!\n\nWhat would you like to do?`,
       buttons: [
+        { id: 'GET_QUOTE', title: 'Get a Quote' },
         { id: 'STATUS', title: 'Pending Inquiries' },
-        { id: 'ORDERS', title: 'My Orders' },
         { id: 'HELP', title: 'Help' },
       ],
     },
@@ -131,8 +131,9 @@ const DEFAULT_COMMANDS = [
     triggers: ['help', '?', 'commands'],
     response: {
       type: 'button',
-      text: `*PrintMart Help – Vendor*\n\n• *QUOTE [amount]* – Send quotation (e.g. QUOTE 5000)\n• *DISPATCH [order] [tracking]* – Mark dispatched\n• *DELIVER [order]* – Mark as delivered\n• *ORDERS* – View all orders\n• *RESET* – Get a new login link\n• *MENU* – Back to main menu\n\nOr just reply here to respond to an inquiry.`,
+      text: `*PrintMart Help – Vendor*\n\n• *GET QUOTE* – Buy items from other sellers\n• *QUOTE [amount]* – Send quotation (e.g. QUOTE 5000)\n• *DISPATCH [order] [tracking]* – Mark dispatched\n• *DELIVER [order]* – Mark as delivered\n• *ORDERS* – View all orders\n• *RESET* – Get a new login link\n• *MENU* – Back to main menu\n\nOr just reply here to respond to an inquiry.`,
       buttons: [
+        { id: 'GET_QUOTE', title: 'Get a Quote' },
         { id: 'STATUS', title: 'Pending Inquiries' },
         { id: 'ORDERS', title: 'My Orders' },
       ],
@@ -157,9 +158,15 @@ const DEFAULT_COMMANDS = [
 ];
 
 const ensureSeeded = async () => {
-  const count = await BotCommand.countDocuments();
-  if (count === 0) {
-    await BotCommand.insertMany(DEFAULT_COMMANDS);
+  for (const cmd of DEFAULT_COMMANDS) {
+    const existing = await BotCommand.findOne({ key: cmd.key });
+    if (!existing) {
+      await BotCommand.create(cmd);
+    } else if (existing.isSystem) {
+      // Keep system commands in sync with latest defaults on every deploy
+      Object.assign(existing, cmd);
+      await existing.save();
+    }
   }
 };
 

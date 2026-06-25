@@ -316,6 +316,16 @@ const handleSellerMessage = async (phone, user, text, interactiveId) => {
     return useBotCmd('seller_welcome', phone, () => wa.sendWelcomeSeller(phone, user.name, user._id), { userId: user._id, name: user.name });
   }
 
+  if (cmd.cmd === 'GET_QUOTE') {
+    const session = await WhatsAppSession.findOne({ phone });
+    if (session) {
+      session.state = 'guest_product';
+      session.context = {};
+      await session.save();
+    }
+    return wa.sendTextMessage(phone, `📦 *What product are you looking for?*\n\nPlease type the product name:\n_(e.g., Business Cards, Flyers, Banners, T-Shirts)_`, user._id);
+  }
+
   if (cmd.cmd === 'HELP') {
     return useBotCmd('seller_help', phone, () => wa.sendHelpSeller(phone, user._id), { userId: user._id });
   }
@@ -611,7 +621,13 @@ const handleUnknownUser = async (phone, text, interactiveId, session, profileNam
       const sellersWithProducts = [];
       const seen = new Set();
       for (const p of matchingProducts) {
-        if (p.seller?.phone && p.seller?.isActive !== false && !seen.has(String(p.seller._id))) {
+        // Skip inactive sellers and skip if the requesting user is the seller themselves
+        if (
+          p.seller?.phone &&
+          p.seller?.isActive !== false &&
+          !seen.has(String(p.seller._id)) &&
+          String(p.seller._id) !== String(session.userId)
+        ) {
           sellersWithProducts.push({ seller: p.seller, product: p });
           seen.add(String(p.seller._id));
           if (sellersWithProducts.length >= 3) break;
@@ -767,7 +783,12 @@ const handleUnknownUser = async (phone, text, interactiveId, session, profileNam
       const sellers = [];
       const seen = new Set();
       for (const p of matchingProducts) {
-        if (p.seller?.phone && p.seller?.isActive !== false && !seen.has(String(p.seller._id))) {
+        if (
+          p.seller?.phone &&
+          p.seller?.isActive !== false &&
+          !seen.has(String(p.seller._id)) &&
+          String(p.seller._id) !== String(session.userId)
+        ) {
           sellers.push(p.seller);
           seen.add(String(p.seller._id));
           if (sellers.length >= 3) break;

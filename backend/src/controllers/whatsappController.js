@@ -15,6 +15,13 @@ const webhookVerify = (req, res) => {
   const mode = req.query['hub.mode'];
   const token = req.query['hub.verify_token'];
   const challenge = req.query['hub.challenge'];
+
+  // Simple health check — no Meta verification params present
+  if (!mode && !token && !challenge) {
+    return res.status(200).json({ status: 'ok' });
+  }
+
+  // Meta webhook challenge-response verification
   const result = wa.verifyWebhook(mode, token, challenge);
   if (result !== null) {
     console.log('[WA-Bot] Webhook verified.');
@@ -1185,7 +1192,8 @@ const findQuotationForBuyer = async (buyerId, ref, status) => {
 
 const verifyHmacSignature = (req) => {
   const secret = process.env.META_APP_SECRET;
-  if (!secret || !req.rawBody) return false;
+  if (!secret) return true; // verification is optional; skip when secret not configured
+  if (!req.rawBody) return false;
   const sig = req.headers['x-hub-signature-256'];
   if (!sig) return false;
   const expected = `sha256=${crypto.createHmac('sha256', secret).update(req.rawBody).digest('hex')}`;

@@ -63,6 +63,10 @@ app.get('/', (req, res) => {
   res.json({ message: 'PrintMart API is running', status: 'ok' });
 });
 
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
 // One-time campaign seed
 app.post('/api/seed-campaign', async (req, res) => {
   try {

@@ -1275,6 +1275,11 @@ const webhookReceive = (req, res) => {
     return res.status(403).json({ message: 'Invalid signature' });
   }
 
+  if (isMetabsp) {
+    const msg = req.body;
+    console.log('[whatsapp] message received from:', msg.from, '→', msg.message, '| type:', msg.type);
+  }
+
   res.json({ received: true });
 
   setImmediate(async () => {

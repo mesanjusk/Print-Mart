@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const Inquiry = require('../models/Inquiry');
 const Product = require('../models/Product');
 const User = require('../models/User');
@@ -1180,20 +1181,40 @@ const findQuotationForBuyer = async (buyerId, ref, status) => {
   return Quotation.findOne({ buyer: buyerId, status }).sort({ createdAt: -1 });
 };
 
+// ─── HMAC signature verification ─────────────────────────────────────────────
+
+const verifyHmacSignature = (req) => {
+  const secret = process.env.META_APP_SECRET;
+  if (!secret || !req.rawBody) return false;
+  const sig = req.headers['x-hub-signature-256'];
+  if (!sig) return false;
+  const expected = `sha256=${crypto.createHmac('sha256', secret).update(req.rawBody).digest('hex')}`;
+  try {
+    return crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected));
+  } catch {
+    return false;
+  }
+};
+
 // ─── Main webhook handler ─────────────────────────────────────────────────────
 
-const webhookReceive = async (req, res) => {
-  // Always respond 200 immediately to Meta
-  res.sendStatus(200);
+const webhookReceive = (req, res) => {
+  if (!verifyHmacSignature(req)) {
+    return res.status(403).json({ message: 'Invalid signature' });
+  }
 
-  try {
-    const body = req.body;
-    if (body.object !== 'whatsapp_business_account') return;
+  res.json({ received: true });
 
-    const changes = body?.entry?.[0]?.changes;
-    if (!changes) return;
+  setImmediate(async () => {
+    try {
+      const body = req.body;
+      if (body.object !== 'whatsapp_business_account') return;
 
-    for (const change of changes) {
+      for (const entry of (body.entry || [])) {
+        const changes = entry?.changes;
+        if (!changes) continue;
+
+        for (const change of changes) {
       const value = change?.value;
 
       // Handle status updates (delivered, read, etc.)
@@ -1370,9 +1391,11 @@ const webhookReceive = async (req, res) => {
         await session.save();
       }
     }
-  } catch (err) {
-    console.error('[WA-Bot] webhookReceive error:', err.message);
   }
+    } catch (err) {
+      console.error('[WA-Bot] webhookReceive error:', err.message);
+    }
+  });
 };
 
 module.exports = { webhookVerify, webhookReceive };

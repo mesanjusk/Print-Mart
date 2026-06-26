@@ -1188,6 +1188,68 @@ const findQuotationForBuyer = async (buyerId, ref, status) => {
   return Quotation.findOne({ buyer: buyerId, status }).sort({ createdAt: -1 });
 };
 
+// ─── Metabsp incoming message handler ────────────────────────────────────────
+
+const METABSP_LOG_TYPE_MAP = { text: 'text', image: 'image' };
+
+const handleMetabspMessage = async (payload) => {
+  if (payload._test === true) return;
+
+  const { from, message, body: bodyText, text, type, messageId, mediaId } = payload;
+  if (!from) return;
+
+  const msgText = message || bodyText || text || '';
+  const msgType = type || 'text';
+  const logType = METABSP_LOG_TYPE_MAP[msgType] || 'unknown';
+
+  console.log(`[Metabsp] Message from ${from} [${msgType}]: ${msgText || mediaId || ''}`);
+
+  await wa.logMessage({
+    direction: 'inbound',
+    phone: from,
+    messageType: logType,
+    message: msgText || `[${msgType}] mediaId:${mediaId || ''}`,
+    waMessageId: messageId,
+    status: 'received',
+  });
+
+  if (['image', 'video', 'audio', 'document'].includes(msgType)) {
+    const adminPhone = process.env.ADMIN_WHATSAPP_PHONE;
+    if (adminPhone && mediaId) {
+      await wa.sendTextMessage(adminPhone,
+        `📎 *Media Message – PrintMart*\n\n📱 From: +${from}\n📁 Type: ${msgType}\n🆔 MediaId: ${mediaId}`
+      ).catch(() => {});
+    }
+    await wa.sendTextMessage(from,
+      `✅ We received your ${msgType}. Our team will review it shortly.\n\nReply *MENU* for options.`
+    ).catch(() => {});
+    return;
+  }
+
+  if (msgType !== 'text' || !msgText) return;
+
+  const phoneVariants = [from, `+${from}`];
+  const user = await User.findOne({ phone: { $in: phoneVariants } });
+  const session = await getOrCreateSession(from, user);
+  session.lastInboundAt = new Date();
+
+  try {
+    if (!user || session.state?.startsWith('reg_') || session.state?.startsWith('guest_') || session.state?.startsWith('sell_')) {
+      await handleUnknownUser(from, msgText, null, session);
+    } else if (user.role === 'seller' || user.role === 'admin') {
+      await handleSellerMessage(from, user, msgText, null);
+    } else {
+      await handleBuyerMessage(from, user, msgText, null, session);
+    }
+  } catch (handlerErr) {
+    console.error(`[Metabsp] Handler error for ${from}:`, handlerErr.message);
+    await wa.sendTextMessage(from, `Sorry, something went wrong. Please try again or reply MENU.`).catch(() => {});
+  }
+
+  session.lastActivity = new Date();
+  await session.save();
+};
+
 // ─── HMAC signature verification ─────────────────────────────────────────────
 
 const verifyHmacSignature = (req) => {
@@ -1207,7 +1269,9 @@ const verifyHmacSignature = (req) => {
 // ─── Main webhook handler ─────────────────────────────────────────────────────
 
 const webhookReceive = (req, res) => {
-  if (!verifyHmacSignature(req)) {
+  const isMetabsp = !!(req.headers['x-metabsp-event'] || req.body?.phoneNumberId);
+
+  if (!isMetabsp && !verifyHmacSignature(req)) {
     return res.status(403).json({ message: 'Invalid signature' });
   }
 
@@ -1216,6 +1280,12 @@ const webhookReceive = (req, res) => {
   setImmediate(async () => {
     try {
       const body = req.body;
+
+      if (isMetabsp) {
+        await handleMetabspMessage(body);
+        return;
+      }
+
       if (body.object !== 'whatsapp_business_account') return;
 
       for (const entry of (body.entry || [])) {

@@ -1,9 +1,86 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useSearchParams, Link } from 'react-router-dom';
-import { FiFilter, FiX, FiChevronDown } from 'react-icons/fi';
+import { useSearchParams } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Filter, X, ChevronDown, Search, SlidersHorizontal, Package } from 'lucide-react';
 import { productAPI, categoryAPI } from '../services/api';
 import ProductCard from '../components/products/ProductCard';
-import Spinner from '../components/common/Spinner';
+import { SkeletonCard } from '../components/ui/skeleton';
+import { Button } from '../components/ui/button';
+import { Badge } from '../components/ui/badge';
+import { cn } from '../lib/utils';
+
+const SORT_OPTIONS = [
+  { value: '', label: 'Relevance' },
+  { value: 'newest', label: 'Newest First' },
+  { value: 'price_asc', label: 'Price: Low → High' },
+  { value: 'price_desc', label: 'Price: High → Low' },
+  { value: 'popular', label: 'Most Popular' },
+];
+
+function FilterSidebar({ categories, category, minPrice, maxPrice, onUpdate, onClear }) {
+  return (
+    <div className="space-y-6">
+      <div>
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Categories</p>
+        <div className="space-y-0.5 max-h-64 overflow-y-auto no-scrollbar">
+          <button
+            onClick={() => onUpdate('category', '')}
+            className={cn(
+              'flex items-center justify-between w-full text-left text-sm px-3 py-2 rounded-lg transition-colors',
+              !category
+                ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/20 dark:text-primary-400 font-medium'
+                : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+            )}
+          >
+            All Categories
+            {!category && <ChevronDown className="h-3.5 w-3.5" />}
+          </button>
+          {categories.map((cat) => (
+            <button
+              key={cat._id}
+              onClick={() => onUpdate('category', cat._id)}
+              className={cn(
+                'flex items-center justify-between w-full text-left text-sm px-3 py-2 rounded-lg transition-colors',
+                category === cat._id
+                  ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/20 dark:text-primary-400 font-medium'
+                  : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+              )}
+            >
+              <span className="truncate">{cat.name}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Price Range (₹)</p>
+        <div className="flex gap-2">
+          <input
+            type="number"
+            placeholder="Min"
+            value={minPrice}
+            onChange={(e) => onUpdate('minPrice', e.target.value)}
+            className="input text-sm h-9 w-full"
+          />
+          <input
+            type="number"
+            placeholder="Max"
+            value={maxPrice}
+            onChange={(e) => onUpdate('maxPrice', e.target.value)}
+            className="input text-sm h-9 w-full"
+          />
+        </div>
+      </div>
+
+      <button
+        onClick={onClear}
+        className="flex items-center gap-1.5 text-sm text-red-500 hover:text-red-600 dark:text-red-400 transition-colors"
+      >
+        <X className="h-3.5 w-3.5" /> Clear all filters
+      </button>
+    </div>
+  );
+}
 
 export default function ProductsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -35,9 +112,7 @@ export default function ProductsPage() {
     categoryAPI.getAll().then((r) => setCategories(Array.isArray(r.data) ? r.data : []));
   }, []);
 
-  useEffect(() => {
-    fetchProducts();
-  }, [fetchProducts]);
+  useEffect(() => { fetchProducts(); }, [fetchProducts]);
 
   const updateFilter = (key, value) => {
     const p = new URLSearchParams(searchParams);
@@ -46,103 +121,185 @@ export default function ProductsPage() {
     setSearchParams(p);
   };
 
+  const activeFilters = [
+    category && categories.find((c) => c._id === category)?.name,
+    minPrice && `Min ₹${minPrice}`,
+    maxPrice && `Max ₹${maxPrice}`,
+  ].filter(Boolean);
+
+  const activeSort = SORT_OPTIONS.find((o) => o.value === sort);
+
   return (
-    <div className="max-w-7xl mx-auto px-4 py-6">
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h1 className="text-xl font-bold text-gray-800">
-            {keyword ? `Results for "${keyword}"` : 'All Products'}
-          </h1>
-          <p className="text-sm text-gray-500">{pagination.total.toLocaleString()} products found</p>
-        </div>
-        <div className="flex gap-3 items-center">
-          <select
-            value={sort}
-            onChange={(e) => updateFilter('sort', e.target.value)}
-            className="input text-sm py-1.5 w-auto"
-          >
-            <option value="">Sort: Relevance</option>
-            <option value="newest">Newest First</option>
-            <option value="price_asc">Price: Low to High</option>
-            <option value="price_desc">Price: High to Low</option>
-            <option value="popular">Most Popular</option>
-          </select>
-          <button onClick={() => setFilterOpen(!filterOpen)} className="md:hidden btn-secondary text-sm py-1.5 flex items-center gap-1">
-            <FiFilter /> Filters
-          </button>
+    <div className="min-h-screen bg-background">
+      {/* Header */}
+      <div className="border-b border-border bg-background sticky top-[var(--navbar-height,57px)] z-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3 min-w-0">
+              <h1 className="text-base font-bold text-foreground truncate">
+                {keyword ? `"${keyword}"` : 'All Products'}
+              </h1>
+              {!loading && (
+                <span className="text-sm text-muted-foreground flex-shrink-0">
+                  {pagination.total.toLocaleString()} products
+                </span>
+              )}
+              {activeFilters.map((f) => (
+                <Badge key={f} variant="secondary" className="hidden sm:flex flex-shrink-0 text-xs">
+                  {f}
+                </Badge>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <select
+                value={sort}
+                onChange={(e) => updateFilter('sort', e.target.value)}
+                className="h-9 px-3 rounded-lg border border-input bg-background text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring hidden sm:block"
+              >
+                {SORT_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setFilterOpen(!filterOpen)}
+                className="md:hidden gap-1.5"
+              >
+                <SlidersHorizontal className="h-3.5 w-3.5" />
+                Filter
+                {activeFilters.length > 0 && (
+                  <Badge className="h-4 w-4 p-0 flex items-center justify-center text-2xs bg-primary-600 text-white">
+                    {activeFilters.length}
+                  </Badge>
+                )}
+              </Button>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div className="flex gap-6">
-        {/* Sidebar Filters */}
-        <aside className={`${filterOpen ? 'block' : 'hidden'} md:block w-56 flex-shrink-0`}>
-          <div className="card p-4 sticky top-20">
-            <h3 className="font-semibold text-gray-800 mb-3">Filters</h3>
-
-            <div className="mb-4">
-              <h4 className="text-sm font-medium text-gray-700 mb-2">Categories</h4>
-              <div className="space-y-1 max-h-48 overflow-y-auto">
-                <button onClick={() => updateFilter('category', '')}
-                  className={`block w-full text-left text-sm px-2 py-1 rounded ${!category ? 'text-green-600 bg-green-50' : 'text-gray-600 hover:bg-gray-50'}`}>
-                  All Categories
-                </button>
-                {categories.map((cat) => (
-                  <button key={cat._id} onClick={() => updateFilter('category', cat._id)}
-                    className={`block w-full text-left text-sm px-2 py-1 rounded ${category === cat._id ? 'text-green-600 bg-green-50' : 'text-gray-600 hover:bg-gray-50'}`}>
-                    {cat.name}
-                  </button>
-                ))}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+        <div className="flex gap-6">
+          {/* Desktop sidebar */}
+          <aside className="hidden md:block w-56 flex-shrink-0">
+            <div className="rounded-xl border border-border bg-card p-4 sticky top-[110px]">
+              <div className="flex items-center gap-2 mb-5">
+                <Filter className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-semibold text-foreground">Filters</span>
               </div>
+              <FilterSidebar
+                categories={categories}
+                category={category}
+                minPrice={minPrice}
+                maxPrice={maxPrice}
+                onUpdate={updateFilter}
+                onClear={() => setSearchParams({})}
+              />
             </div>
+          </aside>
 
-            <div className="mb-4">
-              <h4 className="text-sm font-medium text-gray-700 mb-2">Price Range (₹)</h4>
-              <div className="flex gap-2">
-                <input type="number" placeholder="Min" value={minPrice}
-                  onChange={(e) => updateFilter('minPrice', e.target.value)}
-                  className="input text-sm py-1 w-full" />
-                <input type="number" placeholder="Max" value={maxPrice}
-                  onChange={(e) => updateFilter('maxPrice', e.target.value)}
-                  className="input text-sm py-1 w-full" />
-              </div>
-            </div>
-
-            <button onClick={() => setSearchParams({})}
-              className="text-sm text-red-500 hover:text-red-600 flex items-center gap-1">
-              <FiX size={14} /> Clear all filters
-            </button>
-          </div>
-        </aside>
-
-        {/* Products Grid */}
-        <div className="flex-grow">
-          {loading ? (
-            <div className="py-16"><Spinner size="lg" /></div>
-          ) : products.length === 0 ? (
-            <div className="text-center py-16">
-              <p className="text-2xl text-gray-300 mb-4">🔍</p>
-              <h3 className="text-lg font-medium text-gray-600">No products found</h3>
-              <p className="text-gray-400 text-sm mt-1">Try different keywords or filters</p>
-              <button onClick={() => setSearchParams({})} className="btn-primary mt-4 text-sm">Clear filters</button>
-            </div>
-          ) : (
-            <>
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-                {products.map((p) => <ProductCard key={p._id} product={p} />)}
-              </div>
-
-              {pagination.pages > 1 && (
-                <div className="flex justify-center gap-2 mt-8">
-                  {Array.from({ length: pagination.pages }, (_, i) => i + 1).map((p) => (
-                    <button key={p} onClick={() => updateFilter('page', p)}
-                      className={`w-9 h-9 rounded text-sm font-medium ${p === pagination.page ? 'bg-green-600 text-white' : 'bg-white border text-gray-600 hover:border-green-500'}`}>
-                      {p}
+          {/* Mobile filter drawer */}
+          <AnimatePresence>
+            {filterOpen && (
+              <>
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="fixed inset-0 bg-black/40 z-40 md:hidden"
+                  onClick={() => setFilterOpen(false)}
+                />
+                <motion.div
+                  initial={{ x: '-100%' }}
+                  animate={{ x: 0 }}
+                  exit={{ x: '-100%' }}
+                  transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+                  className="fixed left-0 top-0 bottom-0 w-72 bg-background z-50 shadow-2xl md:hidden p-4 overflow-y-auto"
+                >
+                  <div className="flex items-center justify-between mb-5">
+                    <span className="font-semibold text-foreground">Filters</span>
+                    <button onClick={() => setFilterOpen(false)} className="h-8 w-8 rounded-lg flex items-center justify-center hover:bg-accent">
+                      <X className="h-4 w-4" />
                     </button>
-                  ))}
+                  </div>
+                  <FilterSidebar
+                    categories={categories}
+                    category={category}
+                    minPrice={minPrice}
+                    maxPrice={maxPrice}
+                    onUpdate={(k, v) => { updateFilter(k, v); setFilterOpen(false); }}
+                    onClear={() => { setSearchParams({}); setFilterOpen(false); }}
+                  />
+                </motion.div>
+              </>
+            )}
+          </AnimatePresence>
+
+          {/* Products */}
+          <div className="flex-grow min-w-0">
+            {loading ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                {Array.from({ length: 12 }).map((_, i) => <SkeletonCard key={i} />)}
+              </div>
+            ) : products.length === 0 ? (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex flex-col items-center justify-center py-24 text-center"
+              >
+                <div className="h-20 w-20 rounded-2xl bg-muted flex items-center justify-center mb-4">
+                  <Package className="h-10 w-10 text-muted-foreground/40" />
                 </div>
-              )}
-            </>
-          )}
+                <h3 className="text-lg font-semibold text-foreground mb-1">No products found</h3>
+                <p className="text-muted-foreground text-sm max-w-xs">
+                  Try adjusting your search or filters to find what you&apos;re looking for.
+                </p>
+                <Button onClick={() => setSearchParams({})} variant="outline" size="sm" className="mt-4">
+                  Clear all filters
+                </Button>
+              </motion.div>
+            ) : (
+              <>
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4"
+                >
+                  {products.map((p, i) => (
+                    <motion.div
+                      key={p._id}
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: Math.min(i * 0.04, 0.3), duration: 0.25 }}
+                    >
+                      <ProductCard product={p} />
+                    </motion.div>
+                  ))}
+                </motion.div>
+
+                {pagination.pages > 1 && (
+                  <div className="flex justify-center gap-1.5 mt-8">
+                    {Array.from({ length: Math.min(pagination.pages, 10) }, (_, i) => i + 1).map((p) => (
+                      <button
+                        key={p}
+                        onClick={() => updateFilter('page', p)}
+                        className={cn(
+                          'h-9 w-9 rounded-lg text-sm font-medium transition-all',
+                          p === pagination.page
+                            ? 'bg-primary-600 text-white shadow-sm'
+                            : 'bg-card border border-border text-muted-foreground hover:border-primary-400 hover:text-foreground'
+                        )}
+                      >
+                        {p}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
         </div>
       </div>
     </div>

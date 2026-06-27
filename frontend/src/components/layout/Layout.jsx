@@ -1,14 +1,18 @@
+import { useLocation } from 'react-router-dom';
 import Navbar from './Navbar';
 import Footer from './Footer';
-import BottomNav from './BottomNav';
+
+const DASHBOARD_PREFIX = '/dashboard';
 
 export default function Layout({ children }) {
+  const location = useLocation();
+  const isDashboard = location.pathname.startsWith(DASHBOARD_PREFIX);
+
   return (
     <div className="flex flex-col min-h-screen overflow-x-hidden w-full">
       <Navbar />
-      <main className="flex-grow w-full pb-16 md:pb-0">{children}</main>
-      <Footer />
-      <BottomNav />
+      <main className="flex-grow w-full">{children}</main>
+      {!isDashboard && <Footer />}
     </div>
   );
 }

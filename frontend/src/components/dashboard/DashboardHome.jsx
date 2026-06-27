@@ -1,14 +1,29 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import {
-  FiPackage, FiMessageSquare, FiHeart, FiArrowRight,
-  FiShoppingBag, FiFileText, FiActivity
-} from 'react-icons/fi';
+  Package, MessageSquare, Heart, ArrowRight,
+  ShoppingBag, FileText, MessageCircle, TrendingUp,
+  Plus, Activity, Zap
+} from 'lucide-react';
 import { productAPI, inquiryAPI, supplierAPI, orderAPI, waAdminAPI } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
-import Spinner from '../common/Spinner';
+import { Button } from '../ui/button';
+import { StatCard } from '../ui/stat-card';
+import { Skeleton } from '../ui/skeleton';
+import { Badge } from '../ui/badge';
+import { cn } from '../../lib/utils';
 import PremiumBanner from './PremiumBanner';
 import NotificationSetup from './NotificationSetup';
+
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: { opacity: 1, transition: { staggerChildren: 0.07 } },
+};
+const itemVariants = {
+  hidden: { opacity: 0, y: 12 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.3 } },
+};
 
 export default function DashboardHome() {
   const { user } = useAuth();
@@ -16,7 +31,7 @@ export default function DashboardHome() {
   const [loading, setLoading] = useState(true);
 
   const isSeller = user?.role === 'seller';
-  const isAdmin = user?.role === 'admin';
+  const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
   const isBuyer = user?.role === 'buyer';
 
   useEffect(() => {
@@ -46,112 +61,153 @@ export default function DashboardHome() {
     });
   }, [user, isSeller, isAdmin, isBuyer]);
 
-  if (loading) return <Spinner />;
+  const firstName = user?.name?.split(' ')[0] || 'there';
 
-  const buyerCards = [
-    { icon: <FiMessageSquare size={22} />, count: stats.inquiries, label: 'My Inquiries', to: '/dashboard/inquiries', color: 'green' },
-    { icon: <FiFileText size={22} />, count: '–', label: 'Quotations', to: '/dashboard/quotations', color: 'blue' },
-    { icon: <FiShoppingBag size={22} />, count: stats.orders, label: 'My Orders', to: '/dashboard/my-orders', color: 'purple' },
-    { icon: <FiHeart size={22} />, count: stats.saved, label: 'Saved', to: '/dashboard/saved', color: 'red' },
-  ];
-
-  const sellerCards = [
-    { icon: <FiPackage size={22} />, count: stats.products, label: 'My Products', to: '/dashboard/products', color: 'blue' },
-    { icon: <FiMessageSquare size={22} />, count: stats.inquiries, label: 'Inquiries', to: '/dashboard/inquiries', color: 'green' },
-    { icon: <FiFileText size={22} />, count: '–', label: 'Quotations', to: '/dashboard/quotations', color: 'orange' },
-    { icon: <FiShoppingBag size={22} />, count: stats.orders, label: 'Orders', to: '/dashboard/orders', color: 'purple' },
-  ];
-
-  const adminCards = [
-    { icon: <FiShoppingBag size={22} />, count: stats.orders, label: 'All Orders', to: '/dashboard/all-orders', color: 'purple' },
-    { icon: <FiMessageSquare size={22} />, count: stats.inquiries, label: 'Inquiries', to: '/dashboard/inquiries', color: 'green' },
-    { icon: <FiActivity size={22} />, count: stats.waMessages, label: 'WA Messages', to: '/dashboard/whatsapp-admin', color: 'green' },
-    { icon: <FiFileText size={22} />, count: '–', label: 'Quotations', to: '/dashboard/quotations', color: 'blue' },
-  ];
-
-  const cards = isAdmin ? adminCards : isSeller ? sellerCards : buyerCards;
-
-  const colorMap = {
-    green: 'bg-green-100 text-green-700',
-    blue: 'bg-blue-100 text-blue-600',
-    red: 'bg-red-100 text-red-600',
-    purple: 'bg-purple-100 text-purple-600',
-    orange: 'bg-orange-100 text-orange-600',
-  };
+  const statCards = isAdmin
+    ? [
+        { title: 'All Orders', value: stats.orders, icon: ShoppingBag, to: '/dashboard/all-orders', iconColor: 'text-purple-600', iconBg: 'bg-purple-50 dark:bg-purple-900/20' },
+        { title: 'Inquiries', value: stats.inquiries, icon: MessageSquare, to: '/dashboard/inquiries', iconColor: 'text-green-600', iconBg: 'bg-green-50 dark:bg-green-900/20' },
+        { title: 'WA Messages', value: stats.waMessages, icon: MessageCircle, to: '/dashboard/whatsapp-admin', iconColor: 'text-emerald-600', iconBg: 'bg-emerald-50 dark:bg-emerald-900/20' },
+        { title: 'Quotations', value: '—', icon: FileText, to: '/dashboard/quotations', iconColor: 'text-blue-600', iconBg: 'bg-blue-50 dark:bg-blue-900/20' },
+      ]
+    : isSeller
+    ? [
+        { title: 'My Products', value: stats.products, icon: Package, to: '/dashboard/products', iconColor: 'text-blue-600', iconBg: 'bg-blue-50 dark:bg-blue-900/20' },
+        { title: 'Inquiries', value: stats.inquiries, icon: MessageSquare, to: '/dashboard/inquiries', iconColor: 'text-green-600', iconBg: 'bg-green-50 dark:bg-green-900/20' },
+        { title: 'Quotations', value: '—', icon: FileText, to: '/dashboard/quotations', iconColor: 'text-orange-600', iconBg: 'bg-orange-50 dark:bg-orange-900/20' },
+        { title: 'Orders', value: stats.orders, icon: ShoppingBag, to: '/dashboard/orders', iconColor: 'text-purple-600', iconBg: 'bg-purple-50 dark:bg-purple-900/20' },
+      ]
+    : [
+        { title: 'My Inquiries', value: stats.inquiries, icon: MessageSquare, to: '/dashboard/inquiries', iconColor: 'text-green-600', iconBg: 'bg-green-50 dark:bg-green-900/20' },
+        { title: 'Quotations', value: '—', icon: FileText, to: '/dashboard/quotations', iconColor: 'text-blue-600', iconBg: 'bg-blue-50 dark:bg-blue-900/20' },
+        { title: 'My Orders', value: stats.orders, icon: ShoppingBag, to: '/dashboard/my-orders', iconColor: 'text-purple-600', iconBg: 'bg-purple-50 dark:bg-purple-900/20' },
+        { title: 'Saved', value: stats.saved, icon: Heart, to: '/dashboard/saved', iconColor: 'text-red-600', iconBg: 'bg-red-50 dark:bg-red-900/20' },
+      ];
 
   return (
-    <div>
-      <h1 className="text-xl font-bold text-gray-800 mb-4">
-        {isAdmin ? 'Admin Dashboard' : `Welcome, ${user?.name?.split(' ')[0]}`}
-      </h1>
-      <PremiumBanner />
-      {user?.role === 'seller' && <NotificationSetup />}
-
-      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        {cards.map((card) => (
-          <Link
-            key={card.label}
-            to={card.to}
-            className="card p-5 hover:border-green-400 border transition-colors flex items-center gap-4"
-          >
-            <div className={`w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 ${colorMap[card.color] || colorMap.green}`}>
-              {card.icon}
-            </div>
-            <div className="min-w-0">
-              <p className="text-2xl font-bold text-gray-800">{card.count}</p>
-              <p className="text-sm text-gray-500 truncate">{card.label}</p>
-            </div>
-            <FiArrowRight className="ml-auto text-gray-300 flex-shrink-0" />
+    <div className="space-y-6 max-w-5xl">
+      {/* Header */}
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">
+            {isAdmin ? 'Admin Overview' : `Welcome back, ${firstName} 👋`}
+          </h1>
+          <p className="text-muted-foreground text-sm mt-0.5">
+            {isAdmin ? 'Here\'s what\'s happening on your platform.' : 'Here\'s a summary of your activity.'}
+          </p>
+        </div>
+        {isSeller && (
+          <Link to="/dashboard/products/new">
+            <Button size="sm" className="flex-shrink-0">
+              <Plus className="h-4 w-4" /> Add Product
+            </Button>
           </Link>
-        ))}
+        )}
       </div>
 
-      {/* WhatsApp Bot Info Banner */}
-      <div className="card p-5 mb-4 bg-gradient-to-r from-green-50 to-emerald-50 border-green-200">
-        <div className="flex items-start gap-3">
-          <div className="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0">
-            <svg viewBox="0 0 24 24" className="w-6 h-6 fill-white">
-              <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347"/>
-            </svg>
+      {/* Banners */}
+      <PremiumBanner />
+      {isSeller && <NotificationSetup />}
+
+      {/* Stats */}
+      {loading ? (
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="rounded-xl border border-border bg-card p-6">
+              <Skeleton className="h-4 w-24 mb-4" />
+              <Skeleton className="h-8 w-16 mb-2" />
+              <Skeleton className="h-3 w-20" />
+            </div>
+          ))}
+        </div>
+      ) : (
+        <motion.div
+          variants={containerVariants}
+          initial="hidden"
+          animate="visible"
+          className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4"
+        >
+          {statCards.map((card) => (
+            <motion.div key={card.title} variants={itemVariants}>
+              <Link to={card.to} className="block group">
+                <StatCard
+                  title={card.title}
+                  value={card.value}
+                  icon={card.icon}
+                  iconColor={card.iconColor}
+                  iconBg={card.iconBg}
+                  className="hover:shadow-card-hover hover:border-primary-200 dark:hover:border-primary-800 cursor-pointer transition-all"
+                />
+              </Link>
+            </motion.div>
+          ))}
+        </motion.div>
+      )}
+
+      {/* WhatsApp info */}
+      <div className="rounded-xl border border-emerald-200 dark:border-emerald-800/40 bg-gradient-to-br from-emerald-50 to-green-50 dark:from-emerald-950/20 dark:to-green-950/20 p-5">
+        <div className="flex items-start gap-4">
+          <div className="h-10 w-10 rounded-xl bg-green-500 flex items-center justify-center flex-shrink-0">
+            <MessageCircle className="h-5 w-5 text-white fill-white" />
           </div>
-          <div>
-            <h3 className="font-semibold text-gray-800 mb-1">
-              Manage Everything via WhatsApp
-            </h3>
+          <div className="flex-1 min-w-0">
+            <h3 className="font-semibold text-foreground mb-1">Manage via WhatsApp</h3>
             {isBuyer && (
-              <p className="text-sm text-gray-600">
-                Reply to inquiry notifications, <code className="bg-white rounded px-1 text-green-700 text-xs">ACCEPT</code> quotations,{' '}
-                <code className="bg-white rounded px-1 text-green-700 text-xs">PAID PM-xxxx</code> to confirm payment,{' '}
-                and <code className="bg-white rounded px-1 text-green-700 text-xs">TRACK PM-xxxx</code> to track orders — all from WhatsApp.
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                Reply to inquiry notifications,{' '}
+                <code className="bg-white dark:bg-gray-900 rounded px-1.5 py-0.5 text-green-700 dark:text-green-400 text-xs font-mono">ACCEPT</code>{' '}
+                quotations, and{' '}
+                <code className="bg-white dark:bg-gray-900 rounded px-1.5 py-0.5 text-green-700 dark:text-green-400 text-xs font-mono">TRACK PM-xxxx</code>{' '}
+                to track orders — all from WhatsApp.
               </p>
             )}
             {isSeller && (
-              <p className="text-sm text-gray-600">
-                Reply to inquiries, send <code className="bg-white rounded px-1 text-green-700 text-xs">QUOTE 5000</code> to create a quotation,{' '}
-                <code className="bg-white rounded px-1 text-green-700 text-xs">DISPATCH PM-xxxx TRK123</code> to mark dispatched,{' '}
-                <code className="bg-white rounded px-1 text-green-700 text-xs">DELIVER PM-xxxx</code> when delivered — all from WhatsApp.
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                Reply to inquiries, send{' '}
+                <code className="bg-white dark:bg-gray-900 rounded px-1.5 py-0.5 text-green-700 dark:text-green-400 text-xs font-mono">QUOTE 5000</code>{' '}
+                to create quotations, and{' '}
+                <code className="bg-white dark:bg-gray-900 rounded px-1.5 py-0.5 text-green-700 dark:text-green-400 text-xs font-mono">DISPATCH PM-xxxx TRK123</code>{' '}
+                when dispatched.
               </p>
             )}
             {isAdmin && (
-              <p className="text-sm text-gray-600">
-                Manage all WhatsApp conversations, send broadcasts, view analytics, and monitor the bot flow from the{' '}
-                <Link to="/dashboard/whatsapp-admin" className="text-green-600 underline">WhatsApp Admin panel</Link>.
+              <p className="text-sm text-muted-foreground">
+                Manage conversations, send broadcasts, and view bot analytics from the{' '}
+                <Link to="/dashboard/whatsapp-admin" className="text-primary-600 dark:text-primary-400 underline font-medium">
+                  WhatsApp Admin
+                </Link>{' '}
+                panel.
               </p>
             )}
           </div>
         </div>
       </div>
 
+      {/* Quick actions */}
       {(isSeller || isAdmin) && (
-        <div className="card p-5">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="font-semibold text-gray-800">Quick Actions</h2>
-          </div>
-          <div className="flex flex-wrap gap-3">
-            {isSeller && <Link to="/dashboard/products/new" className="btn-primary text-sm py-2">+ Add Product</Link>}
-            <Link to="/dashboard/inquiries" className="btn-secondary text-sm py-2">View Inquiries</Link>
-            <Link to={isSeller ? '/dashboard/orders' : '/dashboard/all-orders'} className="btn-secondary text-sm py-2">View Orders</Link>
-            {isAdmin && <Link to="/dashboard/whatsapp-admin" className="btn-secondary text-sm py-2">WhatsApp Admin</Link>}
+        <div className="rounded-xl border border-border bg-card p-5">
+          <h2 className="font-semibold text-foreground mb-4 flex items-center gap-2">
+            <Zap className="h-4 w-4 text-primary-600" /> Quick Actions
+          </h2>
+          <div className="flex flex-wrap gap-2">
+            {isSeller && (
+              <Link to="/dashboard/products/new">
+                <Button size="sm">
+                  <Plus className="h-3.5 w-3.5" /> Add Product
+                </Button>
+              </Link>
+            )}
+            <Link to="/dashboard/inquiries">
+              <Button variant="outline" size="sm">View Inquiries</Button>
+            </Link>
+            <Link to={isSeller ? '/dashboard/orders' : '/dashboard/all-orders'}>
+              <Button variant="outline" size="sm">View Orders</Button>
+            </Link>
+            {isAdmin && (
+              <Link to="/dashboard/whatsapp-admin">
+                <Button variant="outline" size="sm">WhatsApp Admin</Button>
+              </Link>
+            )}
           </div>
         </div>
       )}

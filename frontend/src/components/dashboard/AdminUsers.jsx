@@ -1,15 +1,17 @@
 import { useState, useEffect } from 'react';
-import { FiZap, FiToggleLeft, FiToggleRight, FiSearch } from 'react-icons/fi';
+import { Search, Zap, ToggleLeft, ToggleRight, Users } from 'lucide-react';
 import { userAPI } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import { Badge } from '../ui/badge';
 import Spinner from '../common/Spinner';
 import toast from 'react-hot-toast';
+import { cn } from '../../lib/utils';
 
-const ROLE_COLORS = {
-  superadmin: 'bg-red-100 text-red-700',
-  admin: 'bg-purple-100 text-purple-700',
-  seller: 'bg-blue-100 text-blue-700',
-  buyer: 'bg-gray-100 text-gray-600',
+const ROLE_VARIANT = {
+  superadmin: 'destructive',
+  admin: 'purple',
+  seller: 'info',
+  buyer: 'secondary',
 };
 
 export default function AdminUsers() {
@@ -74,41 +76,38 @@ export default function AdminUsers() {
 
   const premiumCount = users.filter((u) => u.role === 'seller' && u.plan === 'premium').length;
   const sellerCount = users.filter((u) => u.role === 'seller').length;
-
   const availableRoles = isSuperAdmin
     ? ['buyer', 'seller', 'admin', 'superadmin']
     : ['buyer', 'seller', 'admin'];
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-5">
-        <div>
-          <h1 className="text-xl font-bold text-gray-800">User Management</h1>
-          <p className="text-sm text-gray-500 mt-0.5">
-            {sellerCount} sellers — {premiumCount} premium (receive WhatsApp broadcasts)
-          </p>
-        </div>
+      <div className="mb-5">
+        <h1 className="text-xl font-bold text-foreground">User Management</h1>
+        <p className="text-sm text-muted-foreground mt-0.5">
+          {sellerCount} sellers · {premiumCount} premium (receive WhatsApp broadcasts)
+        </p>
       </div>
 
-      <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 mb-5 text-sm">
-        <p className="font-medium text-blue-800">WhatsApp Broadcast Cost Control</p>
-        <p className="text-blue-600 text-xs mt-0.5">
-          Only <strong>Premium sellers</strong> receive WhatsApp lead broadcasts. Max <strong>5 messages per inquiry</strong>, ranked by rating.
+      <div className="rounded-xl border border-primary-200 dark:border-primary-800/40 bg-primary-50/50 dark:bg-primary-950/20 px-4 py-3 mb-5">
+        <p className="font-medium text-foreground text-sm">WhatsApp Broadcast Cost Control</p>
+        <p className="text-muted-foreground text-xs mt-0.5">
+          Only <strong className="text-foreground">Premium sellers</strong> receive WhatsApp lead broadcasts. Max <strong className="text-foreground">5 messages per inquiry</strong>, ranked by rating.
           Free sellers see leads in dashboard only. Estimated cost: ≤₹5 per inquiry.
         </p>
       </div>
 
-      <div className="flex gap-3 mb-4">
-        <div className="relative flex-grow max-w-xs">
-          <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={15} />
+      <div className="flex gap-3 mb-4 flex-wrap">
+        <div className="relative flex-1 min-w-[200px] max-w-xs">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search name / email / phone / business..."
+            placeholder="Search name / email / phone..."
             className="input pl-9 text-sm"
           />
         </div>
-        <select value={filter} onChange={(e) => setFilter(e.target.value)} className="input text-sm w-40">
+        <select value={filter} onChange={(e) => setFilter(e.target.value)} className="input text-sm w-44">
           <option value="all">All users</option>
           <option value="seller">Sellers only</option>
           <option value="buyer">Buyers only</option>
@@ -118,69 +117,78 @@ export default function AdminUsers() {
       </div>
 
       {loading ? (
-        <Spinner />
+        <div className="py-16 flex justify-center"><Spinner size="lg" /></div>
+      ) : visible.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-24 text-center">
+          <div className="h-20 w-20 rounded-2xl bg-muted flex items-center justify-center mb-4">
+            <Users className="h-10 w-10 text-muted-foreground/30" />
+          </div>
+          <h3 className="text-lg font-semibold text-foreground mb-1">No users found</h3>
+          <p className="text-muted-foreground text-sm">Try adjusting your search or filter.</p>
+        </div>
       ) : (
-        <div className="card overflow-hidden">
+        <div className="rounded-xl border border-border bg-card overflow-hidden">
           <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b">
-              <tr>
-                <th className="text-left px-4 py-3 font-semibold text-gray-700">User</th>
-                <th className="text-left px-4 py-3 font-semibold text-gray-700">Role</th>
-                <th className="text-center px-4 py-3 font-semibold text-gray-700">Plan</th>
-                <th className="text-center px-4 py-3 font-semibold text-gray-700">Verified</th>
-                <th className="text-center px-4 py-3 font-semibold text-gray-700">Status</th>
-                <th className="text-center px-4 py-3 font-semibold text-gray-700">Actions</th>
+            <thead>
+              <tr className="border-b border-border bg-muted/50">
+                <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">User</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Role</th>
+                <th className="text-center px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Plan</th>
+                <th className="text-center px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Verified</th>
+                <th className="text-center px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Status</th>
+                <th className="text-center px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y">
+            <tbody className="divide-y divide-border/50">
               {visible.map((u) => {
                 const canEditRole = isSuperAdmin || u.role !== 'superadmin';
                 const isSelf = u._id === currentUser?._id;
                 return (
-                  <tr key={u._id} className="hover:bg-gray-50">
+                  <tr key={u._id} className="hover:bg-muted/20 transition-colors">
                     <td className="px-4 py-3">
-                      <p className="font-medium text-gray-800">{u.name} {isSelf && <span className="text-xs text-gray-400">(you)</span>}</p>
-                      <p className="text-xs text-gray-400">{u.email}</p>
-                      {u.phone && <p className="text-xs text-blue-500">{u.phone}</p>}
-                      {u.businessName && <p className="text-xs text-green-600">{u.businessName}</p>}
+                      <p className="font-semibold text-foreground">
+                        {u.name}
+                        {isSelf && <span className="text-xs text-muted-foreground ml-1">(you)</span>}
+                      </p>
+                      {u.email && <p className="text-xs text-muted-foreground">{u.email}</p>}
+                      {u.phone && <p className="text-xs text-primary-600 dark:text-primary-400">{u.phone}</p>}
+                      {u.businessName && <p className="text-xs text-emerald-600 dark:text-emerald-400">{u.businessName}</p>}
                     </td>
                     <td className="px-4 py-3">
                       {canEditRole && !isSelf ? (
                         <select
                           value={u.role}
                           onChange={(e) => handleRoleChange(u._id, e.target.value)}
-                          className={`text-xs font-medium px-2 py-0.5 rounded-full border-0 capitalize cursor-pointer ${ROLE_COLORS[u.role] || 'bg-gray-100 text-gray-600'}`}
+                          className="text-xs font-medium px-2 py-1 rounded-lg border border-border bg-muted/50 text-foreground cursor-pointer capitalize"
                         >
                           {availableRoles.map((r) => (
                             <option key={r} value={r}>{r}</option>
                           ))}
                         </select>
                       ) : (
-                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full capitalize ${ROLE_COLORS[u.role] || 'bg-gray-100 text-gray-600'}`}>
+                        <Badge variant={ROLE_VARIANT[u.role] || 'secondary'} className="text-2xs capitalize">
                           {u.role}
-                        </span>
+                        </Badge>
                       )}
                     </td>
                     <td className="px-4 py-3 text-center">
                       {u.role === 'seller' ? (
-                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                          u.plan === 'premium' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-500'
-                        }`}>
+                        <Badge variant={u.plan === 'premium' ? 'warning' : 'secondary'} className="text-2xs">
                           {u.plan === 'premium' ? '⚡ Premium' : 'Free'}
-                        </span>
+                        </Badge>
                       ) : (
-                        <span className="text-gray-300 text-xs">—</span>
+                        <span className="text-muted-foreground/40 text-xs">—</span>
                       )}
                     </td>
                     <td className="px-4 py-3 text-center">
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${u.isVerified ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                      <Badge variant={u.isVerified ? 'success' : 'warning'} className="text-2xs">
                         {u.isVerified ? 'Verified' : 'Unverified'}
-                      </span>
+                      </Badge>
                     </td>
                     <td className="px-4 py-3 text-center">
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${u.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
+                      <Badge variant={u.isActive ? 'success' : 'destructive'} className="text-2xs">
                         {u.isActive ? 'Active' : 'Disabled'}
-                      </span>
+                      </Badge>
                     </td>
                     <td className="px-4 py-3 text-center">
                       <div className="flex items-center justify-center gap-2">
@@ -188,23 +196,26 @@ export default function AdminUsers() {
                           <button
                             onClick={() => handleTogglePremium(u._id)}
                             title={u.plan === 'premium' ? 'Downgrade to Free' : 'Upgrade to Premium'}
-                            className={`flex items-center gap-1 text-xs px-2.5 py-1.5 rounded font-medium transition-colors ${
+                            className={cn(
+                              'flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg font-medium transition-colors',
                               u.plan === 'premium'
-                                ? 'bg-amber-100 text-amber-700 hover:bg-amber-200'
-                                : 'bg-gray-100 text-gray-600 hover:bg-amber-100 hover:text-amber-700'
-                            }`}
+                                ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 hover:bg-amber-200'
+                                : 'bg-muted text-muted-foreground hover:bg-amber-100 hover:text-amber-700 dark:hover:bg-amber-900/30 dark:hover:text-amber-400'
+                            )}
                           >
-                            <FiZap size={12} />
-                            {u.plan === 'premium' ? 'Downgrade' : 'Make Premium'}
+                            <Zap className="h-3 w-3" />
+                            {u.plan === 'premium' ? 'Downgrade' : 'Upgrade'}
                           </button>
                         )}
                         {!isSelf && (
                           <button
                             onClick={() => handleToggleStatus(u._id)}
                             title={u.isActive ? 'Disable user' : 'Enable user'}
-                            className="text-gray-400 hover:text-gray-600 p-1"
+                            className="text-muted-foreground hover:text-foreground transition-colors p-1"
                           >
-                            {u.isActive ? <FiToggleRight size={20} className="text-green-500" /> : <FiToggleLeft size={20} />}
+                            {u.isActive
+                              ? <ToggleRight className="h-5 w-5 text-emerald-500" />
+                              : <ToggleLeft className="h-5 w-5" />}
                           </button>
                         )}
                       </div>
@@ -212,11 +223,6 @@ export default function AdminUsers() {
                   </tr>
                 );
               })}
-              {visible.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="text-center py-10 text-gray-400">No users found</td>
-                </tr>
-              )}
             </tbody>
           </table>
         </div>

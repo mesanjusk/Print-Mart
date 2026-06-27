@@ -1,6 +1,9 @@
 const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+const mongoSanitize = require('express-mongo-sanitize');
 const connectDB = require('./src/config/db');
 
 dotenv.config();
@@ -9,6 +12,13 @@ connectDB();
 
 const app = express();
 
+// ─── Security headers ───────────────────────────────────────────────────────
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+  contentSecurityPolicy: false, // Managed by frontend
+}));
+
+// ─── CORS ────────────────────────────────────────────────────────────────────
 const ALLOWED_ORIGINS = [
   'https://app.instify.in',
   'https://shop.instify.in',
@@ -37,10 +47,38 @@ app.use(cors({
   },
   credentials: true,
 }));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
 
-app.use('/api/auth', require('./src/routes/authRoutes'));
+// ─── Rate limiting ────────────────────────────────────────────────────────────
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Too many requests, please try again later.' },
+  skip: (req) => req.path.startsWith('/api/whatsapp/webhook'), // don't rate-limit webhook
+});
+app.use(globalLimiter);
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  message: { message: 'Too many auth attempts, please try again later.' },
+});
+
+// ─── Body parsing ─────────────────────────────────────────────────────────────
+app.use(express.json({
+  verify: (req, _res, buf) => {
+    req.rawBody = buf;
+  },
+  limit: '10mb',
+}));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// ─── MongoDB sanitization (prevent NoSQL injection) ──────────────────────────
+app.use(mongoSanitize());
+
+// ─── Routes ──────────────────────────────────────────────────────────────────
+app.use('/api/auth', authLimiter, require('./src/routes/authRoutes'));
 app.use('/api/users', require('./src/routes/userRoutes'));
 app.use('/api/products', require('./src/routes/productRoutes'));
 app.use('/api/categories', require('./src/routes/categoryRoutes'));
@@ -55,42 +93,21 @@ app.use('/api/designs', require('./src/routes/designRoutes'));
 app.use('/api/offers', require('./src/routes/offerRoutes'));
 app.use('/api/push', require('./src/routes/pushRoutes'));
 
-app.get('/', (req, res) => {
-  res.json({ message: 'PrintMart API is running', status: 'ok' });
+app.get('/', (_req, res) => {
+  res.json({
+    message: 'PrintMart API is running',
+    status: 'ok',
+    version: '2.0.0',
+    timestamp: new Date().toISOString(),
+  });
 });
 
-// One-time campaign seed
-app.post('/api/seed-campaign', async (req, res) => {
-  try {
-    const WhatsAppCampaign = require('./src/models/WhatsAppCampaign');
-    const { keyword = 'hi', reply = 'test', name = 'Hi Auto-Reply' } = req.body;
-    const existing = await WhatsAppCampaign.findOne({ name });
-    if (existing) return res.json({ message: 'Campaign already exists', campaign: existing });
-    const campaign = await WhatsAppCampaign.create({
-      name,
-      type: 'auto_reply',
-      status: 'active',
-      trigger: { keywords: [keyword.toLowerCase()], matchType: 'exact', roles: ['any'] },
-      response: { messageType: 'text', content: reply },
-      respectOptOut: true,
-    });
-    res.json({ message: 'Campaign created', campaign });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
-// One-time admin bootstrap
-// If no admin exists yet → allowed without secret (first-run mode)
-// If admin already exists → requires ADMIN_SEED_SECRET env var
+// ─── Admin seed (first-run / protected) ────────────────────────────────────
 app.get('/api/seed-admin/status', async (req, res) => {
   try {
     const User = require('./src/models/User');
     const superadminExists = await User.exists({ role: 'superadmin' });
-    res.json({
-      adminExists: !!superadminExists,
-      secretConfigured: !!process.env.ADMIN_SEED_SECRET,
-    });
+    res.json({ adminExists: !!superadminExists, secretConfigured: !!process.env.ADMIN_SEED_SECRET });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -132,13 +149,35 @@ app.post('/api/seed-admin', async (req, res) => {
   }
 });
 
+app.post('/api/seed-campaign', async (req, res) => {
+  try {
+    const WhatsAppCampaign = require('./src/models/WhatsAppCampaign');
+    const { keyword = 'hi', reply = 'test', name = 'Hi Auto-Reply' } = req.body;
+    const existing = await WhatsAppCampaign.findOne({ name });
+    if (existing) return res.json({ message: 'Campaign already exists', campaign: existing });
+    const campaign = await WhatsAppCampaign.create({
+      name,
+      type: 'auto_reply',
+      status: 'active',
+      trigger: { keywords: [keyword.toLowerCase()], matchType: 'exact', roles: ['any'] },
+      response: { messageType: 'text', content: reply },
+      respectOptOut: true,
+    });
+    res.json({ message: 'Campaign created', campaign });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// ─── Global error handler ────────────────────────────────────────────────────
 app.use((err, req, res, next) => {
   const statusCode = res.statusCode === 200 ? 500 : res.statusCode;
+  console.error(`[${req.method}] ${req.path}:`, err.message);
   res.status(statusCode).json({
     message: err.message,
-    stack: process.env.NODE_ENV === 'production' ? null : err.stack,
+    ...(process.env.NODE_ENV !== 'production' && { stack: err.stack }),
   });
 });
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, () => console.log(`✅ PrintMart API v2.0 running on port ${PORT}`));

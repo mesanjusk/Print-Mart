@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { FiBell, FiCheckCircle, FiAlertCircle } from 'react-icons/fi';
+import { Bell, CheckCircle2, AlertCircle } from 'lucide-react';
 import { pushAPI } from '../../services/api';
+import { Button } from '../ui/button';
 import toast from 'react-hot-toast';
 
 const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY;
@@ -13,7 +14,6 @@ function urlBase64ToUint8Array(base64String) {
 }
 
 export default function NotificationSetup() {
-  // status: 'checking' | 'unsupported' | 'denied' | 'prompt' | 'subscribed'
   const [status, setStatus] = useState('checking');
   const [loading, setLoading] = useState(false);
 
@@ -54,7 +54,7 @@ export default function NotificationSetup() {
       });
       await pushAPI.subscribe(sub.toJSON());
       setStatus('subscribed');
-      toast.success('Notifications enabled! You\'ll get instant lead alerts.');
+      toast.success("Notifications enabled! You'll get instant lead alerts.");
     } catch (err) {
       toast.error('Could not enable notifications: ' + err.message);
     } finally {
@@ -82,10 +82,10 @@ export default function NotificationSetup() {
 
   if (status === 'subscribed') {
     return (
-      <div className="flex items-center gap-2.5 bg-green-50 border border-green-200 rounded-lg px-4 py-2.5 mb-4 text-sm">
-        <FiCheckCircle size={15} className="text-green-600 flex-shrink-0" />
-        <span className="text-green-800 flex-grow">Push notifications active — instant lead alerts on your phone</span>
-        <button onClick={disable} disabled={loading} className="text-xs text-gray-400 hover:text-red-500 ml-2">
+      <div className="flex items-center gap-2.5 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/40 rounded-xl px-4 py-2.5 mb-4">
+        <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
+        <span className="text-sm text-emerald-800 dark:text-emerald-300 flex-1">Push notifications active — instant lead alerts on your device</span>
+        <button onClick={disable} disabled={loading} className="text-xs text-muted-foreground hover:text-destructive transition-colors ml-2">
           Disable
         </button>
       </div>
@@ -94,33 +94,29 @@ export default function NotificationSetup() {
 
   if (status === 'denied') {
     return (
-      <div className="flex items-center gap-2.5 bg-red-50 border border-red-200 rounded-lg px-4 py-2.5 mb-4 text-sm">
-        <FiAlertCircle size={15} className="text-red-500 flex-shrink-0" />
-        <span className="text-red-700">Notifications blocked. Go to browser settings → Site permissions → Allow notifications for this site.</span>
+      <div className="flex items-center gap-2.5 bg-destructive/5 border border-destructive/20 rounded-xl px-4 py-2.5 mb-4">
+        <AlertCircle className="h-4 w-4 text-destructive flex-shrink-0" />
+        <span className="text-sm text-destructive/90">
+          Notifications blocked. Go to browser Settings → Site permissions → Allow notifications for this site.
+        </span>
       </div>
     );
   }
 
   return (
-    <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-5">
+    <div className="rounded-xl border border-primary-200 dark:border-primary-800/40 bg-primary-50/50 dark:bg-primary-950/20 p-4 mb-5">
       <div className="flex items-start gap-3">
-        <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
-          <FiBell className="text-blue-600" size={20} />
+        <div className="h-10 w-10 bg-primary-100 dark:bg-primary-900/30 rounded-xl flex items-center justify-center flex-shrink-0">
+          <Bell className="h-5 w-5 text-primary-600 dark:text-primary-400" />
         </div>
-        <div className="flex-grow">
-          <p className="font-semibold text-gray-800">Enable Push Notifications</p>
-          <p className="text-xs text-gray-500 mt-0.5 mb-3">
+        <div className="flex-1">
+          <p className="font-semibold text-foreground text-sm">Enable Push Notifications</p>
+          <p className="text-xs text-muted-foreground mt-0.5 mb-3">
             Get instant alerts when buyers need your products — even when the app is closed.
-            No WhatsApp. Works like any app notification on your phone.
           </p>
-          <button
-            onClick={enable}
-            disabled={loading}
-            className="btn-primary text-sm py-1.5 px-4 flex items-center gap-1.5"
-          >
-            <FiBell size={14} />
-            {loading ? 'Enabling...' : 'Enable Notifications'}
-          </button>
+          <Button size="sm" loading={loading} onClick={enable} className="gap-1.5">
+            {!loading && <><Bell className="h-3.5 w-3.5" /> Enable Notifications</>}
+          </Button>
         </div>
       </div>
     </div>

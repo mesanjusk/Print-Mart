@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
-import { FiEdit2, FiTrash2, FiPlus, FiX, FiCheck } from 'react-icons/fi';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Edit2, Trash2, Plus, X, Check, FolderOpen } from 'lucide-react';
 import { categoryAPI } from '../../services/api';
+import { Button } from '../ui/button';
 import Spinner from '../common/Spinner';
 import toast from 'react-hot-toast';
 
@@ -24,18 +26,8 @@ export default function ManageCategories() {
 
   useEffect(fetchCategories, []);
 
-  const openAdd = () => {
-    setEditing(null);
-    setForm(EMPTY_FORM);
-    setShowForm(true);
-  };
-
-  const openEdit = (cat) => {
-    setEditing(cat);
-    setForm({ name: cat.name, description: cat.description || '', icon: cat.icon || '' });
-    setShowForm(true);
-  };
-
+  const openAdd = () => { setEditing(null); setForm(EMPTY_FORM); setShowForm(true); };
+  const openEdit = (cat) => { setEditing(cat); setForm({ name: cat.name, description: cat.description || '', icon: cat.icon || '' }); setShowForm(true); };
   const closeForm = () => { setShowForm(false); setEditing(null); setForm(EMPTY_FORM); };
 
   const handleSave = async () => {
@@ -59,7 +51,7 @@ export default function ManageCategories() {
   };
 
   const handleDelete = async (cat) => {
-    if (!confirm(`Delete category "${cat.name}"? Products in this category will be uncategorized.`)) return;
+    if (!confirm(`Delete category "${cat.name}"? Products will be uncategorized.`)) return;
     try {
       await categoryAPI.remove(cat._id);
       toast.success('Category deleted');
@@ -71,81 +63,93 @@ export default function ManageCategories() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="text-xl font-bold text-gray-800">Categories</h1>
-        <button onClick={openAdd} className="btn-primary text-sm py-1.5 flex items-center gap-1">
-          <FiPlus size={14} /> Add Category
-        </button>
+      <div className="flex items-center justify-between mb-5">
+        <div>
+          <h1 className="text-xl font-bold text-foreground">Categories</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">{categories.length} categories · sorted A–Z</p>
+        </div>
+        <Button size="sm" onClick={openAdd} className="gap-1.5">
+          <Plus className="h-4 w-4" /> Add Category
+        </Button>
       </div>
 
-      {showForm && (
-        <div className="card p-5 mb-5 border-l-4 border-green-500">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold text-gray-700">{editing ? 'Edit Category' : 'New Category'}</h3>
-            <button onClick={closeForm} className="text-gray-400 hover:text-gray-600"><FiX size={16} /></button>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Name *</label>
-              <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
-                className="input" placeholder="e.g. Business Cards" autoFocus
-                onKeyDown={(e) => e.key === 'Enter' && handleSave()} />
+      <AnimatePresence>
+        {showForm && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="rounded-xl border-l-4 border-l-primary-500 border-y border-r border-border bg-card p-5 mb-5 overflow-hidden"
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-foreground">{editing ? 'Edit Category' : 'New Category'}</h3>
+              <Button variant="ghost" size="icon-sm" onClick={closeForm}>
+                <X className="h-4 w-4" />
+              </Button>
             </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Description</label>
-              <input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })}
-                className="input" placeholder="Optional" />
+            <div className="grid sm:grid-cols-3 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-foreground">Name *</label>
+                <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  className="input" placeholder="e.g. Business Cards" autoFocus
+                  onKeyDown={(e) => e.key === 'Enter' && handleSave()} />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-foreground">Description</label>
+                <input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })}
+                  className="input" placeholder="Optional" />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-foreground">Icon (emoji)</label>
+                <input value={form.icon} onChange={(e) => setForm({ ...form, icon: e.target.value })}
+                  className="input" placeholder="e.g. 🖨️" maxLength={4} />
+              </div>
             </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Icon (emoji)</label>
-              <input value={form.icon} onChange={(e) => setForm({ ...form, icon: e.target.value })}
-                className="input" placeholder="e.g. 🖨️" maxLength={4} />
+            <div className="flex gap-2 mt-4">
+              <Button loading={saving} onClick={handleSave} size="sm" className="gap-1.5">
+                {!saving && <><Check className="h-3.5 w-3.5" /> {editing ? 'Save Changes' : 'Add Category'}</>}
+              </Button>
+              <Button variant="outline" size="sm" onClick={closeForm}>Cancel</Button>
             </div>
-          </div>
-          <div className="flex gap-2 mt-4">
-            <button onClick={handleSave} disabled={saving} className="btn-primary flex items-center gap-1">
-              <FiCheck size={14} /> {saving ? 'Saving...' : editing ? 'Save Changes' : 'Add Category'}
-            </button>
-            <button onClick={closeForm} className="btn-outline">Cancel</button>
-          </div>
-        </div>
-      )}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-      {loading ? <Spinner /> : categories.length === 0 ? (
-        <div className="text-center py-16 text-gray-400">
-          <p className="text-4xl mb-3">🗂️</p>
-          <p className="mb-4">No categories yet</p>
-          <button onClick={openAdd} className="btn-primary text-sm">Add your first category</button>
+      {loading ? (
+        <div className="py-16 flex justify-center"><Spinner size="lg" /></div>
+      ) : categories.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-24 text-center">
+          <div className="h-20 w-20 rounded-2xl bg-muted flex items-center justify-center mb-4">
+            <FolderOpen className="h-10 w-10 text-muted-foreground/30" />
+          </div>
+          <h3 className="text-lg font-semibold text-foreground mb-1">No categories yet</h3>
+          <p className="text-muted-foreground text-sm mb-4">Add your first category to organize products.</p>
+          <Button size="sm" onClick={openAdd}>Add your first category</Button>
         </div>
       ) : (
-        <div className="card divide-y">
+        <div className="rounded-xl border border-border bg-card divide-y divide-border/50 overflow-hidden">
           {categories.map((cat) => (
-            <div key={cat._id} className="flex items-center gap-3 p-4 hover:bg-gray-50 transition-colors">
-              <div className="w-9 h-9 bg-green-100 rounded-lg flex items-center justify-center text-lg flex-shrink-0">
+            <div key={cat._id} className="flex items-center gap-3 p-4 hover:bg-muted/20 transition-colors">
+              <div className="h-9 w-9 bg-primary-50 dark:bg-primary-900/20 rounded-lg flex items-center justify-center text-lg flex-shrink-0">
                 {cat.icon || '📁'}
               </div>
-              <div className="flex-grow min-w-0">
-                <p className="font-medium text-gray-800">{cat.name}</p>
-                {cat.description && <p className="text-sm text-gray-500 truncate">{cat.description}</p>}
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-foreground">{cat.name}</p>
+                {cat.description && <p className="text-sm text-muted-foreground truncate">{cat.description}</p>}
                 {cat.subcategories?.length > 0 && (
-                  <p className="text-xs text-gray-400">{cat.subcategories.length} subcategories</p>
+                  <p className="text-xs text-muted-foreground/60">{cat.subcategories.length} subcategories</p>
                 )}
               </div>
               <div className="flex gap-1 flex-shrink-0">
-                <button onClick={() => openEdit(cat)}
-                  className="p-2 text-gray-400 hover:text-green-600 rounded hover:bg-green-50 transition-colors">
-                  <FiEdit2 size={14} />
-                </button>
-                <button onClick={() => handleDelete(cat)}
-                  className="p-2 text-gray-400 hover:text-red-500 rounded hover:bg-red-50 transition-colors">
-                  <FiTrash2 size={14} />
-                </button>
+                <Button variant="ghost" size="icon-sm" onClick={() => openEdit(cat)} className="text-muted-foreground hover:text-primary-600">
+                  <Edit2 className="h-4 w-4" />
+                </Button>
+                <Button variant="ghost" size="icon-sm" onClick={() => handleDelete(cat)} className="text-muted-foreground hover:text-destructive">
+                  <Trash2 className="h-4 w-4" />
+                </Button>
               </div>
             </div>
           ))}
-          <div className="p-4 text-sm text-gray-400 text-center">
-            {categories.length} categories · sorted A–Z
-          </div>
         </div>
       )}
     </div>

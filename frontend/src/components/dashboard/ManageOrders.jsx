@@ -1,37 +1,38 @@
 import { useState, useEffect, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Package, Truck, CheckCircle2, XCircle, Clock, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react';
 import { orderAPI } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
-import toast from 'react-hot-toast';
+import { Button } from '../ui/button';
+import { Badge } from '../ui/badge';
+import { StatCard } from '../ui/stat-card';
 import Spinner from '../common/Spinner';
-import {
-  FiPackage, FiTruck, FiCheckCircle, FiXCircle,
-  FiClock, FiChevronDown, FiChevronUp, FiRefreshCw
-} from 'react-icons/fi';
+import toast from 'react-hot-toast';
+import { cn } from '../../lib/utils';
 
-const STATUS_COLORS = {
-  pending_payment: 'bg-yellow-100 text-yellow-700',
-  paid: 'bg-blue-100 text-blue-700',
-  processing: 'bg-purple-100 text-purple-700',
-  dispatched: 'bg-orange-100 text-orange-700',
-  delivered: 'bg-green-100 text-green-700',
-  cancelled: 'bg-red-100 text-red-700',
+const STATUS_VARIANT = {
+  pending_payment: 'warning',
+  paid: 'info',
+  processing: 'purple',
+  dispatched: 'warning',
+  delivered: 'success',
+  cancelled: 'destructive',
 };
 
-const STATUS_ICONS = {
-  pending_payment: <FiClock size={14} />,
-  paid: <FiCheckCircle size={14} />,
-  processing: <FiPackage size={14} />,
-  dispatched: <FiTruck size={14} />,
-  delivered: <FiCheckCircle size={14} />,
-  cancelled: <FiXCircle size={14} />,
+const STATUS_ICON = {
+  pending_payment: <Clock className="h-3.5 w-3.5" />,
+  paid: <CheckCircle2 className="h-3.5 w-3.5" />,
+  processing: <Package className="h-3.5 w-3.5" />,
+  dispatched: <Truck className="h-3.5 w-3.5" />,
+  delivered: <CheckCircle2 className="h-3.5 w-3.5" />,
+  cancelled: <XCircle className="h-3.5 w-3.5" />,
 };
 
-function OrderRow({ order, onRefresh, isAdmin }) {
+function OrderRow({ order, onRefresh }) {
   const { user } = useAuth();
   const [expanded, setExpanded] = useState(false);
   const [dispatchForm, setDispatchForm] = useState({ show: false, tracking: '' });
   const [loading, setLoading] = useState(false);
-
   const isSeller = user?.role === 'seller' || user?.role === 'admin';
 
   const handleConfirmPayment = async () => {
@@ -60,7 +61,7 @@ function OrderRow({ order, onRefresh, isAdmin }) {
     setLoading(true);
     try {
       await orderAPI.deliver(order._id);
-      toast.success('Order marked delivered & buyer notified via WhatsApp');
+      toast.success('Order marked delivered & buyer notified');
       onRefresh();
     } catch (e) { toast.error(e.response?.data?.message || 'Failed'); } finally { setLoading(false); }
   };
@@ -71,120 +72,122 @@ function OrderRow({ order, onRefresh, isAdmin }) {
     setLoading(true);
     try {
       await orderAPI.cancel(order._id, { reason: reason || 'Cancelled by admin' });
-      toast.success('Order cancelled & parties notified via WhatsApp');
+      toast.success('Order cancelled & parties notified');
       onRefresh();
     } catch (e) { toast.error(e.response?.data?.message || 'Failed'); } finally { setLoading(false); }
   };
 
   return (
-    <div className="card mb-3 overflow-hidden">
+    <div className="rounded-xl border border-border bg-card overflow-hidden">
       <div
-        className="flex items-center gap-3 p-4 cursor-pointer hover:bg-gray-50 transition-colors"
+        className="flex items-center gap-3 p-4 cursor-pointer hover:bg-muted/30 transition-colors"
         onClick={() => setExpanded(!expanded)}
       >
-        <div className={`flex items-center gap-1 badge text-xs ${STATUS_COLORS[order.status] || 'bg-gray-100 text-gray-600'}`}>
-          {STATUS_ICONS[order.status]} {order.status.replace(/_/g, ' ').toUpperCase()}
-        </div>
-        <div className="flex-grow min-w-0">
-          <p className="font-semibold text-gray-800 text-sm">{order.orderNumber}</p>
-          <p className="text-xs text-gray-500">
-            {order.product?.name} • ₹{order.total?.toFixed(2)}
+        <Badge variant={STATUS_VARIANT[order.status] || 'secondary'} className="text-2xs gap-1 flex-shrink-0 capitalize">
+          {STATUS_ICON[order.status]}
+          {order.status.replace(/_/g, ' ')}
+        </Badge>
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold text-foreground text-sm">{order.orderNumber}</p>
+          <p className="text-xs text-muted-foreground truncate">
+            {order.product?.name} · ₹{order.total?.toFixed(2)}
           </p>
         </div>
-        <div className="text-right text-xs text-gray-500 hidden sm:block">
-          <p>{order.buyer?.name}</p>
+        <div className="text-right text-xs text-muted-foreground hidden sm:block">
+          <p className="font-medium text-foreground">{order.buyer?.name}</p>
           <p>{new Date(order.createdAt).toLocaleDateString('en-IN')}</p>
         </div>
-        {expanded ? <FiChevronUp className="text-gray-400 flex-shrink-0" /> : <FiChevronDown className="text-gray-400 flex-shrink-0" />}
+        {expanded ? <ChevronUp className="h-4 w-4 text-muted-foreground flex-shrink-0" /> : <ChevronDown className="h-4 w-4 text-muted-foreground flex-shrink-0" />}
       </div>
 
-      {expanded && (
-        <div className="border-t px-4 pb-4 pt-3">
-          <div className="grid sm:grid-cols-2 gap-4 text-sm mb-4">
-            <div>
-              <p className="text-gray-500 text-xs mb-1">Buyer</p>
-              <p className="font-medium">{order.buyer?.name}</p>
-              <p className="text-gray-500">{order.buyer?.phone || order.buyer?.email}</p>
-            </div>
-            <div>
-              <p className="text-gray-500 text-xs mb-1">Vendor</p>
-              <p className="font-medium">{order.seller?.businessName || order.seller?.name}</p>
-              <p className="text-gray-500">{order.seller?.phone}</p>
-            </div>
-            <div>
-              <p className="text-gray-500 text-xs mb-1">Payment</p>
-              <p className="font-medium capitalize">{order.paymentStatus}</p>
-              {order.paymentConfirmedAt && <p className="text-gray-400 text-xs">{new Date(order.paymentConfirmedAt).toLocaleDateString('en-IN')}</p>}
-            </div>
-            <div>
-              <p className="text-gray-500 text-xs mb-1">Tracking</p>
-              <p className="font-medium">{order.trackingInfo || 'Not dispatched'}</p>
-              {order.dispatchedAt && <p className="text-gray-400 text-xs">Dispatched: {new Date(order.dispatchedAt).toLocaleDateString('en-IN')}</p>}
-            </div>
-          </div>
-
-          {order.items?.length > 0 && (
-            <div className="mb-4">
-              <p className="text-xs text-gray-500 mb-2">Items</p>
-              {order.items.map((item, i) => (
-                <div key={i} className="flex justify-between text-sm py-1 border-b last:border-0">
-                  <span className="text-gray-700">{item.description} ({item.quantity} {item.unit})</span>
-                  <span className="font-medium">₹{item.total?.toFixed(2)}</span>
-                </div>
-              ))}
-              <div className="flex justify-between text-sm font-bold mt-2 pt-2">
-                <span>Total</span>
-                <span>₹{order.total?.toFixed(2)}</span>
+      <AnimatePresence>
+        {expanded && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="border-t border-border/50 overflow-hidden"
+          >
+            <div className="px-4 pb-4 pt-3">
+              <div className="grid sm:grid-cols-2 gap-4 text-sm mb-4">
+                {[
+                  { label: 'Buyer', primary: order.buyer?.name, secondary: order.buyer?.phone || order.buyer?.email },
+                  { label: 'Vendor', primary: order.seller?.businessName || order.seller?.name, secondary: order.seller?.phone },
+                  { label: 'Payment', primary: order.paymentStatus, secondary: order.paymentConfirmedAt ? new Date(order.paymentConfirmedAt).toLocaleDateString('en-IN') : null },
+                  { label: 'Tracking', primary: order.trackingInfo || 'Not dispatched', secondary: order.dispatchedAt ? `Dispatched: ${new Date(order.dispatchedAt).toLocaleDateString('en-IN')}` : null },
+                ].map(({ label, primary, secondary }) => (
+                  <div key={label}>
+                    <p className="text-xs text-muted-foreground mb-0.5">{label}</p>
+                    <p className="font-medium text-foreground capitalize">{primary}</p>
+                    {secondary && <p className="text-xs text-muted-foreground">{secondary}</p>}
+                  </div>
+                ))}
               </div>
-            </div>
-          )}
 
-          {/* Actions for seller/admin */}
-          {isSeller && (
-            <div className="flex flex-wrap gap-2">
-              {order.status === 'pending_payment' && (
-                <button onClick={handleConfirmPayment} disabled={loading} className="btn-primary text-xs py-1.5 px-3 disabled:opacity-60">
-                  ✅ Confirm Payment
-                </button>
-              )}
-              {['paid', 'processing'].includes(order.status) && !dispatchForm.show && (
-                <button onClick={() => setDispatchForm({ show: true, tracking: '' })} disabled={loading} className="bg-orange-500 text-white text-xs py-1.5 px-3 rounded font-medium hover:bg-orange-600 transition-colors disabled:opacity-60">
-                  🚚 Mark Dispatched
-                </button>
-              )}
-              {dispatchForm.show && (
-                <div className="flex gap-2 w-full">
-                  <input
-                    type="text"
-                    value={dispatchForm.tracking}
-                    onChange={(e) => setDispatchForm({ ...dispatchForm, tracking: e.target.value })}
-                    className="input flex-grow text-sm"
-                    placeholder="Enter tracking number..."
-                    onKeyDown={(e) => e.key === 'Enter' && handleDispatch()}
-                  />
-                  <button onClick={handleDispatch} disabled={loading} className="btn-primary text-xs px-3 disabled:opacity-60">
-                    {loading ? <FiRefreshCw className="animate-spin" /> : 'Dispatch'}
-                  </button>
-                  <button onClick={() => setDispatchForm({ show: false, tracking: '' })} className="btn-secondary text-xs px-3">Cancel</button>
+              {order.items?.length > 0 && (
+                <div className="rounded-lg border border-border overflow-hidden mb-4">
+                  {order.items.map((item, i) => (
+                    <div key={i} className="flex justify-between text-sm px-3 py-2 border-b border-border/50 last:border-0">
+                      <span className="text-foreground">{item.description} ({item.quantity} {item.unit})</span>
+                      <span className="font-medium text-foreground">₹{item.total?.toFixed(2)}</span>
+                    </div>
+                  ))}
+                  <div className="flex justify-between text-sm font-bold px-3 py-2 bg-muted/50">
+                    <span>Total</span>
+                    <span>₹{order.total?.toFixed(2)}</span>
+                  </div>
                 </div>
               )}
-              {order.status === 'dispatched' && (
-                <button onClick={handleDeliver} disabled={loading} className="btn-primary text-xs py-1.5 px-3 disabled:opacity-60">
-                  📦 Mark Delivered
-                </button>
-              )}
-              {!['delivered', 'cancelled'].includes(order.status) && (
-                <button onClick={handleCancel} disabled={loading} className="bg-red-500 text-white text-xs py-1.5 px-3 rounded font-medium hover:bg-red-600 transition-colors disabled:opacity-60">
-                  Cancel Order
-                </button>
+
+              {isSeller && (
+                <div className="flex flex-wrap gap-2">
+                  {order.status === 'pending_payment' && (
+                    <Button size="sm" loading={loading} onClick={handleConfirmPayment} className="text-xs">
+                      {!loading && '✅ Confirm Payment'}
+                    </Button>
+                  )}
+                  {['paid', 'processing'].includes(order.status) && !dispatchForm.show && (
+                    <Button size="sm" variant="warning" loading={loading} onClick={() => setDispatchForm({ show: true, tracking: '' })} className="text-xs">
+                      {!loading && <><Truck className="h-3.5 w-3.5" /> Mark Dispatched</>}
+                    </Button>
+                  )}
+                  {dispatchForm.show && (
+                    <div className="flex gap-2 w-full">
+                      <input
+                        type="text"
+                        value={dispatchForm.tracking}
+                        onChange={(e) => setDispatchForm({ ...dispatchForm, tracking: e.target.value })}
+                        className="input flex-1 text-sm"
+                        placeholder="Enter tracking number..."
+                        onKeyDown={(e) => e.key === 'Enter' && handleDispatch()}
+                      />
+                      <Button size="sm" loading={loading} onClick={handleDispatch} className="text-xs">
+                        {!loading && 'Dispatch'}
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => setDispatchForm({ show: false, tracking: '' })} className="text-xs">Cancel</Button>
+                    </div>
+                  )}
+                  {order.status === 'dispatched' && (
+                    <Button size="sm" loading={loading} onClick={handleDeliver} className="text-xs">
+                      {!loading && <><Package className="h-3.5 w-3.5" /> Mark Delivered</>}
+                    </Button>
+                  )}
+                  {!['delivered', 'cancelled'].includes(order.status) && (
+                    <Button size="sm" variant="destructive" loading={loading} onClick={handleCancel} className="text-xs">
+                      {!loading && 'Cancel Order'}
+                    </Button>
+                  )}
+                </div>
               )}
             </div>
-          )}
-        </div>
-      )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
+
+const STATUSES = ['', 'pending_payment', 'paid', 'processing', 'dispatched', 'delivered', 'cancelled'];
 
 export default function ManageOrders() {
   const { user } = useAuth();
@@ -194,7 +197,6 @@ export default function ManageOrders() {
   const [page, setPage] = useState(1);
   const [pages, setPages] = useState(1);
   const [stats, setStats] = useState(null);
-
   const isAdmin = user?.role === 'admin';
 
   const load = useCallback(() => {
@@ -203,77 +205,82 @@ export default function ManageOrders() {
     fetcher({ status: statusFilter, page }).then((r) => {
       setOrders(r.data.orders || []);
       setPages(r.data.pages || 1);
-      setLoading(false);
-    }).catch(() => setLoading(false));
+    }).catch(() => {}).finally(() => setLoading(false));
   }, [isAdmin, statusFilter, page]);
 
   useEffect(() => { load(); }, [load]);
-
   useEffect(() => {
-    if (isAdmin) {
-      orderAPI.getStats().then((r) => setStats(r.data)).catch(() => {});
-    }
+    if (isAdmin) orderAPI.getStats().then((r) => setStats(r.data)).catch(() => {});
   }, [isAdmin]);
-
-  const statuses = ['', 'pending_payment', 'paid', 'processing', 'dispatched', 'delivered', 'cancelled'];
 
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-xl font-bold text-gray-800">
-          {isAdmin ? 'All Orders' : 'Vendor Orders'}
-        </h1>
-        <button onClick={load} className="btn-secondary text-sm flex items-center gap-1">
-          <FiRefreshCw size={14} /> Refresh
-        </button>
+        <div>
+          <h1 className="text-xl font-bold text-foreground">{isAdmin ? 'All Orders' : 'Vendor Orders'}</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">{orders.length} orders</p>
+        </div>
+        <Button variant="outline" size="sm" onClick={load} className="gap-1.5">
+          <RefreshCw className="h-3.5 w-3.5" /> Refresh
+        </Button>
       </div>
 
       {isAdmin && stats && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
           {[
-            { label: 'Total', value: stats.total, color: 'gray' },
-            { label: 'Pending', value: stats.pending, color: 'yellow' },
-            { label: 'Dispatched', value: stats.dispatched, color: 'orange' },
-            { label: 'Delivered', value: stats.delivered, color: 'green' },
+            { title: 'Total Orders', value: stats.total },
+            { title: 'Pending', value: stats.pending },
+            { title: 'Dispatched', value: stats.dispatched },
+            { title: 'Delivered', value: stats.delivered },
           ].map((s) => (
-            <div key={s.label} className="card p-3 text-center">
-              <p className="text-2xl font-bold text-gray-800">{s.value}</p>
-              <p className="text-xs text-gray-500">{s.label}</p>
+            <div key={s.title} className="rounded-xl border border-border bg-card p-4 text-center">
+              <p className="text-2xl font-bold text-foreground">{s.value}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{s.title}</p>
             </div>
           ))}
         </div>
       )}
 
-      <div className="flex gap-2 mb-4 flex-wrap">
-        {statuses.map((s) => (
+      <div className="flex gap-1.5 mb-5 flex-wrap">
+        {STATUSES.map((s) => (
           <button
             key={s}
             onClick={() => { setStatusFilter(s); setPage(1); }}
-            className={`text-xs px-3 py-1.5 rounded-full border font-medium transition-colors ${
-              statusFilter === s ? 'bg-green-600 text-white border-green-600' : 'border-gray-200 text-gray-600 hover:border-green-400 hover:text-green-600'
-            }`}
+            className={cn(
+              'text-xs px-3 py-1.5 rounded-full border font-medium transition-all',
+              statusFilter === s
+                ? 'bg-primary-600 text-white border-primary-600 shadow-sm'
+                : 'border-border text-muted-foreground hover:border-primary-400 hover:text-foreground bg-card'
+            )}
           >
-            {s ? s.replace(/_/g, ' ').toUpperCase() : 'All'}
+            {s ? s.replace(/_/g, ' ') : 'All'}
           </button>
         ))}
       </div>
 
-      {loading ? <Spinner /> : orders.length === 0 ? (
-        <div className="card p-10 text-center text-gray-400">
-          <FiPackage size={40} className="mx-auto mb-2 opacity-40" />
-          <p>No orders found</p>
+      {loading ? (
+        <div className="py-16 flex justify-center"><Spinner size="lg" /></div>
+      ) : orders.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-24 text-center">
+          <div className="h-20 w-20 rounded-2xl bg-muted flex items-center justify-center mb-4">
+            <Package className="h-10 w-10 text-muted-foreground/30" />
+          </div>
+          <h3 className="text-lg font-semibold text-foreground mb-1">No orders found</h3>
+          <p className="text-muted-foreground text-sm">Orders will appear here when placed.</p>
         </div>
       ) : (
-        orders.map((order) => (
-          <OrderRow key={order._id} order={order} onRefresh={load} isAdmin={isAdmin} />
-        ))
+        <div className="space-y-3">
+          {orders.map((order) => (
+            <OrderRow key={order._id} order={order} onRefresh={load} />
+          ))}
+        </div>
       )}
 
       {pages > 1 && (
-        <div className="flex justify-center gap-3 mt-4">
-          <button disabled={page === 1} onClick={() => setPage((p) => p - 1)} className="btn-secondary text-sm disabled:opacity-40">← Prev</button>
-          <span className="text-sm text-gray-500 self-center">Page {page} of {pages}</span>
-          <button disabled={page >= pages} onClick={() => setPage((p) => p + 1)} className="btn-secondary text-sm disabled:opacity-40">Next →</button>
+        <div className="flex justify-center gap-2 mt-6">
+          <Button variant="outline" size="sm" disabled={page === 1} onClick={() => setPage((p) => p - 1)}>← Prev</Button>
+          <span className="text-sm text-muted-foreground self-center">Page {page} of {pages}</span>
+          <Button variant="outline" size="sm" disabled={page >= pages} onClick={() => setPage((p) => p + 1)}>Next →</Button>
         </div>
       )}
     </div>

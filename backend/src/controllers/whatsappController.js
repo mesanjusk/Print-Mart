@@ -716,56 +716,51 @@ const handleUnknownUser = async (phone, text, interactiveId, session, profileNam
 
       const CLIENT = process.env.CLIENT_URL || 'https://shop.instify.in';
 
+      // Build seller contact lines to embed directly in the body
+      let sellerLines = '';
+      if (sellers.length > 0) {
+        for (const s of sellers) {
+          const sellerClean = s.phone.replace(/\D/g, '');
+          const sellerWaNum = sellerClean.startsWith('91') ? sellerClean : `91${sellerClean}`;
+          const displayName = s.businessName || s.name;
+          sellerLines +=
+            `\n\n🏪 *${displayName}*\n` +
+            `📞 +${sellerWaNum}\n` +
+            `💬 https://wa.me/${sellerWaNum}\n` +
+            `📞 ${CLIENT}/call?phone=${sellerWaNum}`;
+        }
+      }
+
+      // Build track link line for registered users
+      let trackLine = '';
+      let trackerUser = null;
+      if (session.userId) {
+        trackerUser = await User.findById(session.userId);
+        if (trackerUser) {
+          const trackLink = await generateMagicLink(trackerUser, '/dashboard/inquiries');
+          trackLine = `\n\n🔗 Track your inquiry: ${trackLink}`;
+        }
+      }
+
       const confirmBody =
         `✅ *Inquiry Received, ${buyerName}!*\n\n` +
         `📦 *Product:* ${product}\n` +
         `📊 *Quantity:* ${qty}\n\n` +
         (sellers.length > 0
           ? `*${sellers.length}* seller(s) will contact you shortly on WhatsApp.`
-          : `We couldn't find a seller for *${product}* right now. We've logged your request — our team will follow up with you shortly.`);
+          : `We couldn't find a seller for *${product}* right now. We've logged your request — our team will follow up with you shortly.`) +
+        sellerLines +
+        trackLine +
+        `\n\nNeed anything else?`;
 
-      // Track Inquiry as CTA URL button (shown above Help/Menu)
-      if (session.userId) {
-        const trackerUser = await User.findById(session.userId);
-        if (trackerUser) {
-          const trackLink = await generateMagicLink(trackerUser, '/dashboard/inquiries');
-          await wa.sendCtaUrlMessage(phone, confirmBody, 'Track Inquiry', trackLink, session.userId);
-        } else {
-          await wa.sendTextMessage(phone, confirmBody, null);
-        }
-      } else {
-        await wa.sendTextMessage(phone, confirmBody, null);
-      }
-
-      // Help + Menu quick-reply buttons (separate message, appears below Track button)
+      // Single consolidated message with Help + Main Menu buttons
       await wa.sendButtonMessage(phone,
-        `Need anything else?`,
+        confirmBody,
         [{ id: 'HELP', title: 'Help' }, { id: 'MENU', title: 'Main Menu' }],
         session.userId || null
       ).catch(() => {});
 
-      // Per seller: Chat button + Call button (2 CTA messages, both as buttons)
       if (sellers.length > 0) {
-        for (const s of sellers) {
-          const sellerClean = s.phone.replace(/\D/g, '');
-          const sellerWaNum = sellerClean.startsWith('91') ? sellerClean : `91${sellerClean}`;
-          const displayName = s.businessName || s.name;
-          await wa.sendCtaUrlMessage(
-            phone,
-            `🏪 *${displayName}*\n📞 +${sellerWaNum}`,
-            'Chat on WhatsApp',
-            `https://wa.me/${sellerWaNum}`,
-            session.userId || null
-          ).catch(() => {});
-          await wa.sendCtaUrlMessage(
-            phone,
-            `📞 Call *${displayName}*`,
-            'Call Now',
-            `${CLIENT}/call?phone=${sellerWaNum}`,
-            session.userId || null
-          ).catch(() => {});
-        }
-
         // Notify sellers only if within 24-hour messaging window
         const guestClean = phone.replace(/\D/g, '');
         const buyerWaNum = guestClean.startsWith('91') ? guestClean : `91${guestClean}`;
@@ -882,32 +877,34 @@ const handleUnknownUser = async (phone, text, interactiveId, session, profileNam
         }
       }
 
-      // Message 1: confirmation + Register button (single message)
-      await wa.sendButtonMessage(phone,
-        `✅ *Thank you, ${guestName}!*\n\nYour requirement for *${product}* (Qty: ${qty}) has been received.\n\n${sellers.length > 0 ? `*${sellers.length}* seller(s) will contact you shortly.` : `We couldn't find a seller right now. Our team will follow up with you on WhatsApp shortly.`}\n\nRegister free to track all your inquiries:`,
-        [{ id: 'REGISTER', title: 'Register Free' }]
-      );
-
+      // Build seller contact lines to embed directly in the body
+      let guestSellerLines = '';
       if (sellers.length > 0) {
-        // Per seller: Chat button + Call button (both as CTA buttons)
         for (const s of sellers) {
           const sellerClean = s.phone.replace(/\D/g, '');
           const sellerWaNum = sellerClean.startsWith('91') ? sellerClean : `91${sellerClean}`;
           const displayName = s.businessName || s.name;
-          await wa.sendCtaUrlMessage(
-            phone,
-            `🏪 *${displayName}*\n📞 +${sellerWaNum}`,
-            'Chat on WhatsApp',
-            `https://wa.me/${sellerWaNum}`
-          ).catch(() => {});
-          await wa.sendCtaUrlMessage(
-            phone,
-            `📞 Call *${displayName}*`,
-            'Call Now',
-            `${CLIENT}/call?phone=${sellerWaNum}`
-          ).catch(() => {});
+          guestSellerLines +=
+            `\n\n🏪 *${displayName}*\n` +
+            `📞 +${sellerWaNum}\n` +
+            `💬 https://wa.me/${sellerWaNum}\n` +
+            `📞 ${CLIENT}/call?phone=${sellerWaNum}`;
         }
+      }
 
+      // Single consolidated message with Register Free + Help buttons
+      await wa.sendButtonMessage(phone,
+        `✅ *Thank you, ${guestName}!*\n\n` +
+        `Your requirement for *${product}* (Qty: ${qty}) has been received.\n\n` +
+        (sellers.length > 0
+          ? `*${sellers.length}* seller(s) will contact you shortly.`
+          : `We couldn't find a seller right now. Our team will follow up with you on WhatsApp shortly.`) +
+        guestSellerLines +
+        `\n\nRegister free to track all your inquiries.`,
+        [{ id: 'REGISTER', title: 'Register Free' }, { id: 'HELP', title: 'Help' }]
+      );
+
+      if (sellers.length > 0) {
         // Notify sellers only if within 24-hour messaging window
         const guestClean = phone.replace(/\D/g, '');
         const buyerWaNum = guestClean.startsWith('91') ? guestClean : `91${guestClean}`;
